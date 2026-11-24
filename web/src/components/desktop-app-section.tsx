@@ -103,7 +103,7 @@ export function DesktopAppSection() {
   return (
     <section id="desktop-app" className="scroll-mt-6 border-y border-subtle bg-[var(--surface)]">
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-        <div className="grid gap-12 lg:grid-cols-[1fr_2fr]">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_2fr]">
           <div>
             <p className="label-caps">Desktop app</p>
             <h2 className="mt-3 text-[1.9rem] font-semibold leading-tight tracking-[-0.03em]">The full RouterDeck, installed on your computer.</h2>

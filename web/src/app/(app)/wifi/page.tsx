@@ -224,7 +224,7 @@ export default function WifiPage() {
       )}
       <GuestPassCard mainSsid={data?.find((n) => n.band === "2.4GHz")?.ssid ?? data?.[0]?.ssid} />
       {data && <SameNameNotice data={data} />}
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {isLoading &&
           [0, 1].map((i) => (
             <Card key={i} className="space-y-4 p-6">

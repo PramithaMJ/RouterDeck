@@ -108,7 +108,7 @@ export default function SpeedTestPage() {
     <>
       <PageHeader title="Speed test" description="Measure the internet speed this device gets through your network." />
 
-      <div className="grid gap-5 lg:grid-cols-[1.05fr_1fr]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.05fr_1fr]">
         <Card className="relative overflow-hidden p-5 sm:p-7">
 
           {/* Steps */}

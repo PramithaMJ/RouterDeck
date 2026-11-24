@@ -76,7 +76,7 @@ export default function Home() {
       </header>
 
       {/* Hero */}
-      <main className="mx-auto grid max-w-6xl gap-10 px-4 pb-20 pt-6 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:gap-16 lg:pt-14">
+      <main className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 pb-20 pt-6 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:gap-16 lg:pt-14">
         <section className="animate-slide-up">
           <a
             href="#desktop-app"
@@ -130,7 +130,7 @@ export default function Home() {
 
       {/* What you can do */}
       <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-        <div className="grid gap-12 lg:grid-cols-[1fr_2fr]">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_2fr]">
           <div>
             <p className="label-caps">What you can do</p>
             <h2 className="mt-3 text-[1.9rem] font-semibold leading-tight tracking-[-0.03em]">The things people actually open the router page for.</h2>
@@ -154,7 +154,7 @@ export default function Home() {
       {/* How it works */}
       <section>
         <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-          <div className="grid gap-12 lg:grid-cols-[1fr_2fr]">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_2fr]">
             <div>
               <p className="label-caps">How it works</p>
               <h2 className="mt-3 text-[1.9rem] font-semibold leading-tight tracking-[-0.03em]">In the browser: three minutes, once.</h2>
@@ -177,7 +177,7 @@ export default function Home() {
 
       {/* Support + FAQ */}
       <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-        <div className="grid gap-12 lg:grid-cols-[1fr_2fr]">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_2fr]">
           <div>
             <p className="label-caps">Routers</p>
             <ul className="mt-4 space-y-2.5 text-[14px]">

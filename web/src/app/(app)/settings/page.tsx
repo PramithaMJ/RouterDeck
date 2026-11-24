@@ -169,7 +169,7 @@ export default function SettingsPage() {
           ))}
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader title="Your router" icon={<Router className="size-5 text-muted" />} />
           <div className="divide-y divide-[var(--border)] px-5 pb-3 pt-2 sm:px-6">

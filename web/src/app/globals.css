@@ -142,3 +142,15 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Phones: grid children may shrink below their content's width (long
+   commands, tables) instead of widening the whole page. */
+@layer base {
+  .grid > * {
+    min-width: 0;
+  }
+  html,
+  body {
+    overflow-x: clip;
+  }
+}
