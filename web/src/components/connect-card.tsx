@@ -301,7 +301,7 @@ export function ConnectCard() {
             {!deskOk && <MethodRow
               icon={<Terminal className="size-5" />}
               title="RouterDeck Connect"
-              subtitle={`${CHROME_STORE_URL ? "" : "Recommended. "}Small app for Windows, Mac and Linux. Works in every browser and lets your phones join.`}
+              subtitle="Small helper for using RouterDeck in any browser, and on your phones."
               selected={method === "connector"}
               onSelect={() => setMethod("connector")}
               status={checking ? <Spinner className="size-3.5" /> : conPaired ? <Badge tone="green">Connected</Badge> : conOk ? <Badge tone="amber">Needs pairing</Badge> : <Badge>Not running</Badge>}
@@ -315,6 +315,17 @@ export function ConnectCard() {
             />}
             <MethodRow icon={<PlayCircle className="size-5" />} title="Try the demo" subtitle="Explore everything with a simulated router." selected={method === "demo"} onSelect={() => setMethod("demo")} />
           </div>
+          {!deskOk && !mobile && (
+            <a
+              href="/download/"
+              className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-dashed border-subtle px-4 py-3 text-[13px] transition hover:border-[var(--text)]"
+            >
+              <span>
+                <span className="font-medium">Easiest: the desktop app.</span> <span className="text-muted">Windows, Mac and Linux. Connects by itself.</span>
+              </span>
+              <span className="shrink-0 font-medium">Download →</span>
+            </a>
+          )}
 
           {method && method !== "demo" && ready(method) && (
             <div className="mt-5 animate-fade-in space-y-3">

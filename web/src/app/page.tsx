@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BuiltByFooter } from "@/components/built-by";
 import { Logo } from "@/components/brand";
 import { ConnectCard } from "@/components/connect-card";
+import { DesktopAppSection, HeroDownload } from "@/components/desktop-app-section";
 import { DesktopHome } from "@/components/desktop-home";
 import { IspStrip } from "@/components/isp-strip";
 import { ProductPreview } from "@/components/product-preview";
@@ -31,13 +32,20 @@ const FAQ = [
   ],
   [
     "Do I have to download anything?",
-    "No. Drag the RouterDeck bookmark to your bookmarks bar, open your router's page (usually 192.168.1.1) and click it. RouterDeck opens connected through that tab. Browsers (rightly) stop public websites from reaching your router directly, so the bookmark works from inside your router's own page. The extension and the RouterDeck Connect app are optional extras for one-click use and for phones.",
+    "No. Drag the RouterDeck bookmark to your bookmarks bar, open your router's page (usually 192.168.1.1) and click it. RouterDeck opens connected through that tab. Browsers (rightly) stop public websites from reaching your router directly, so the bookmark works from inside your router's own page. For the full experience, install the free desktop app for Windows, Mac or Linux. The extension and RouterDeck Connect are other optional extras.",
   ],
   [
     "Which routers work?",
     "SLT-Mobitel fiber routers built on Realtek (like the HG7) are fully supported. Huawei 4G routers used by Dialog, Mobitel, Hutch and Airtel, and the Starlink dish, are in beta. Others are on the way. Open an issue to request yours.",
   ],
-  ["Does it work on my phone?", "The speed test and the demo do. Managing a router needs the bridge, which runs on a computer for now."],
+  [
+    "Is there an app for Windows, Mac or Linux?",
+    "Yes, free. Download it from the Desktop app section above or router.pramitha.lk/download. It connects to your router by itself, keeps your login in the system keychain, ends guest passes on time from the menu bar or system tray, can share itself to phones with a QR code, and updates itself.",
+  ],
+  [
+    "Does it work on my phone?",
+    "Yes, iPhone and Android. Open your router's page on the phone (usually 192.168.1.1) and tap the RouterDeck bookmark (Router page button → Set up → iPhone/Android). Or turn on \"Share with phones\" in the desktop app and scan its QR code.",
+  ],
   [
     "Will it break my router?",
     "RouterDeck uses your router's own forms and checks, the same as clicking around its admin page. Anything risky (restart, allow-list mode, deleting rules) asks you to confirm first.",
@@ -51,8 +59,8 @@ export default function Home() {
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
         <Logo />
         <nav className="flex items-center gap-0.5 text-[13.5px]">
-          <Link href="/download/" className="hidden rounded-lg px-3 py-2 text-muted transition hover:text-[var(--text)] sm:inline-flex">
-            Desktop app
+          <Link href="/download/" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 font-medium transition hover:bg-[var(--surface-2)]">
+            Download app
           </Link>
           <Link href="/speed-test/" className="hidden rounded-lg px-3 py-2 text-muted transition hover:text-[var(--text)] sm:inline-flex">
             Speed test
@@ -70,6 +78,14 @@ export default function Home() {
       {/* Hero */}
       <main className="mx-auto grid max-w-6xl gap-10 px-4 pb-20 pt-6 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:gap-16 lg:pt-14">
         <section className="animate-slide-up">
+          <a
+            href="#desktop-app"
+            className="mb-6 inline-flex items-center gap-2 rounded-full border border-subtle py-1 pl-1 pr-3 text-[12.5px] font-medium transition hover:border-[var(--text)]"
+          >
+            <span className="rounded-full bg-[var(--text)] px-2 py-0.5 text-[11px] text-[var(--bg)]">New</span>
+            Desktop app for Windows, Mac and Linux
+            <span aria-hidden>→</span>
+          </a>
           <p className="label-caps">For homes on SLT-Mobitel · Dialog · Mobitel · Hutch · Starlink</p>
           <h1 className="mt-5 max-w-[15ch] text-[2.6rem] font-semibold leading-[1.02] tracking-[-0.035em] sm:text-[3.6rem]">
             Your router, without the old admin page.
@@ -88,6 +104,7 @@ export default function Home() {
               <span className="size-1.5 rounded-full bg-emerald-500" /> Password never stored
             </span>
           </div>
+          <HeroDownload />
           <div className="mt-10 hidden lg:block">
             <ProductPreview />
           </div>
@@ -101,13 +118,6 @@ export default function Home() {
               Run a speed test
             </Link>{" "}
             without connecting anything.
-          </p>
-          <p className="mt-1.5 text-center text-[12.5px] text-muted">
-            Prefer an app?{" "}
-            <Link href="/download/" className="font-medium text-[var(--text)] underline decoration-[var(--border)] underline-offset-4 hover:decoration-[var(--text)]">
-              Get RouterDeck
-            </Link>{" "}
-            for Windows, Mac or Linux.
           </p>
         </section>
 
@@ -139,15 +149,17 @@ export default function Home() {
         </div>
       </section>
 
+      <DesktopAppSection />
+
       {/* How it works */}
-      <section className="border-y border-subtle bg-[var(--surface)]">
+      <section>
         <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
           <div className="grid gap-12 lg:grid-cols-[1fr_2fr]">
             <div>
               <p className="label-caps">How it works</p>
-              <h2 className="mt-3 text-[1.9rem] font-semibold leading-tight tracking-[-0.03em]">Three minutes, once.</h2>
+              <h2 className="mt-3 text-[1.9rem] font-semibold leading-tight tracking-[-0.03em]">In the browser: three minutes, once.</h2>
               <p className="mt-4 max-w-[38ch] text-[14.5px] leading-relaxed text-muted">
-                Your router only answers inside your home, so RouterDeck runs in your browser and reaches it through a tiny bridge on your own computer. Nothing passes through our servers, because there aren&apos;t any.
+                Your router only answers inside your home, so RouterDeck runs in your browser and reaches it through a tiny bridge on your own computer. Nothing passes through our servers, because there aren&apos;t any. The <a href="#desktop-app" className="text-[var(--text)] underline decoration-[var(--border)] underline-offset-4">desktop app</a> skips all of this.
               </p>
             </div>
             <ol className="grid gap-6 sm:grid-cols-3">
@@ -221,8 +233,11 @@ export default function Home() {
             <p className="mt-1.5 text-[14.5px] opacity-70">Free, open source, and it never leaves your home network.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <a href="#connect" className="inline-flex h-11 items-center rounded-lg bg-[var(--on-ink)] px-5 text-[14.5px] font-medium text-[var(--ink)] transition hover:opacity-90">
-              Connect my router
+            <a href="#desktop-app" className="inline-flex h-11 items-center rounded-lg bg-[var(--on-ink)] px-5 text-[14.5px] font-medium text-[var(--ink)] transition hover:opacity-90">
+              Get the desktop app
+            </a>
+            <a href="#connect" className="inline-flex h-11 items-center rounded-lg border border-white/20 px-5 text-[14.5px] font-medium transition hover:bg-white/10 dark:border-black/20 dark:hover:bg-black/5">
+              Use in the browser
             </a>
             <a href="https://github.com/PramithaMJ/RouterDeck" target="_blank" rel="noopener" className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-white/20 px-5 text-[14.5px] font-medium transition hover:bg-white/10 dark:border-black/20 dark:hover:bg-black/5">
               View source <ArrowUpRight className="size-4" />

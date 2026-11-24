@@ -15,6 +15,7 @@ on:
       - "web/**"
       - "extension/**"
       - "connector/**"
+      - "desktop/package.json"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
