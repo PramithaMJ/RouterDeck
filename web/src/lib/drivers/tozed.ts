@@ -239,13 +239,15 @@ class TozedDriver implements RouterDriver {
       const type = networkType(str(net.network_type_str));
       const online = /connect/i.test(str(sys.connectStatus)) && !/disconnect/i.test(str(sys.connectStatus));
       const devices = await this.deviceList().catch(() => [] as Device[]);
-      const model = str(init.deviceType) || str(ver.module) || "4G router";
+      const model = str(ver.board_type) || str(init.deviceType) || str(ver.module) || "4G router";
+      const ispName: Record<string, string> = { dialog: "Dialog", mobitel: "Mobitel", slt: "SLT-Mobitel", hutch: "Hutch", airtel: "Airtel" };
       return {
         identity: {
           model,
           vendor: "Tozed",
           isp,
-          firmware: str(init.displayedVersion) || str(ver.modversion) || str(sys.softwareVersion) || undefined,
+          firmware: str(ver.real_fwversion) || str(init.displayedVersion) || str(ver.modversion) || str(sys.softwareVersion) || undefined,
+          hardware: str(ver.hwversion) || undefined,
         },
         uptime: parseUptime(str(sys.uptime)),
         dns: [str(sys.dns1 ?? sys.priDns), str(sys.dns2 ?? sys.secDns)].filter((d) => d && d !== "0.0.0.0"),
@@ -253,7 +255,8 @@ class TozedDriver implements RouterDriver {
         internet: { online, publicIp: str(sys.wanIP ?? sys.wan_ip) || undefined, protocol: type ? `Mobile data (${type})` : "Mobile data" },
         wan: [{ name: "Mobile data", kind: "internet", protocol: type ?? "Cellular", ipv4: str(sys.wanIP ?? sys.wan_ip) || undefined, up: online }],
         cellular: {
-          operator: operator || undefined,
+          // The router reports a numeric network code (e.g. 41311); show the provider's name.
+          operator: (/^\d+$/.test(operator) && isp ? ispName[isp] : operator) || undefined,
           networkType: type,
           bars: num(net.signal_lvl),
           rsrp: num(net.RSRP),
@@ -284,7 +287,9 @@ class TozedDriver implements RouterDriver {
     ] as [Band, Json[]][]) {
       for (const r of rows) {
         const mac = normalizeMac(str(r.mac));
-        if (mac) wifi.set(mac, { band, ip: str(r.ip) || undefined, rssi: num(r.rssi), host: str(r.user) || undefined, rate: num(r.rxrate) });
+        // rssi comes without its sign ("51" = -51 dBm).
+        const rssi = num(r.rssi);
+        if (mac) wifi.set(mac, { band, ip: str(r.ip) || undefined, rssi: rssi === undefined ? undefined : -Math.abs(rssi), host: str(r.user) || undefined, rate: num(r.rxrate) });
       }
     }
     const devices = new Map<string, Device>();
