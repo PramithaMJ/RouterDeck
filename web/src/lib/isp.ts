@@ -31,8 +31,13 @@ export function ispById(id?: string): IspBrand | undefined {
   return id ? ISPS.find((i) => i.id === id) : undefined;
 }
 
+/** Logo sources in order of preference (provider favicons). */
+export function ispLogoUrls(isp: IspBrand): string[] {
+  return [`https://icons.duckduckgo.com/ip3/${isp.domain}.ico`, `https://www.google.com/s2/favicons?domain=${isp.domain}&sz=64`];
+}
+
 export function ispLogoUrl(isp: IspBrand) {
-  return `https://icons.duckduckgo.com/ip3/${isp.domain}.ico`;
+  return ispLogoUrls(isp)[0];
 }
 
 /** Best-effort detection from any text the router reveals. */

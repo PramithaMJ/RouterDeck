@@ -1,19 +1,38 @@
 "use client";
 
 import { Ban, Cable, Check, Info, MoreHorizontal, Pencil, Plus, RefreshCw, Search, ShieldOff, Smartphone, Wifi } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { suggestThisDevice, useThisDevice } from "@/lib/this-device";
+import { useSession } from "@/lib/session";
 import { AccessModeCard, useAccessLabels } from "@/components/access-mode";
 import { PageHeader } from "@/components/app-shell";
+import { Ipv6Notice } from "@/components/ipv6-notice";
 import { DeviceIcon } from "@/components/device-icon";
 import { Badge, Button, Card, ConfirmDialog, CopyButton, cn, Dialog, EmptyState, Field, Input, Notice, Segmented, Skeleton } from "@/components/ui";
 import { displayName, guessKind, isRandomizedMac } from "@/lib/devices";
-import { qk, useDevices, useNicknames, useRouterAction } from "@/lib/queries";
+import { qk, useDevices, useLocalIp, useNicknames, useRouterAction } from "@/lib/queries";
 import type { Device } from "@/lib/router/types";
 import { normalizeMac } from "@/lib/router/util";
 
 type Filter = "all" | "online" | "blocked";
 
-function DeviceRow({ d, onBlock, onUnblock, onRename, busy }: { d: Device; onBlock: () => void; onUnblock: () => void; onRename: () => void; busy: boolean }) {
+function DeviceRow({
+  d,
+  onBlock,
+  onUnblock,
+  onRename,
+  busy,
+  isMe,
+  onToggleMe,
+}: {
+  d: Device;
+  onBlock: () => void;
+  onUnblock: () => void;
+  onRename: () => void;
+  busy: boolean;
+  isMe: boolean;
+  onToggleMe: () => void;
+}) {
   const names = useNicknames((s) => s.names);
   const labels = useAccessLabels();
   const [open, setOpen] = useState(false);
@@ -24,7 +43,13 @@ function DeviceRow({ d, onBlock, onUnblock, onRename, busy }: { d: Device; onBlo
         <DeviceIcon kind={guessKind(d, names[d.mac])} blocked={d.blocked} className="size-10 sm:size-11" />
         <button className="min-w-0 flex-1 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           <div className="flex items-center gap-2">
+            {d.online && !d.blocked && <span className="size-2 shrink-0 rounded-full bg-emerald-500" title="Online now" aria-label="Online" />}
             <p className="truncate text-[14.5px] font-medium">{name}</p>
+            {isMe && (
+              <Badge tone="brand" className="shrink-0">
+                This device
+              </Badge>
+            )}
             {d.blocked && (
               <Badge tone="red" className="hidden shrink-0 sm:inline-flex">
                 {labels.blockedBadge}
@@ -94,9 +119,14 @@ function DeviceRow({ d, onBlock, onUnblock, onRename, busy }: { d: Device; onBlo
               <Info className="mt-0.5 size-3.5 shrink-0" /> This device uses a private (randomized) Wi-Fi address. If it changes its address, the block may stop applying.
             </p>
           )}
-          <Button size="sm" variant="secondary" className="mt-3" onClick={onRename}>
-            <Pencil className="size-3.5" /> Rename
-          </Button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={onRename}>
+              <Pencil className="size-3.5" /> Rename
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onToggleMe}>
+              <Smartphone className="size-3.5" /> {isMe ? "Not the device I'm using" : "This is the device I'm using"}
+            </Button>
+          </div>
         </div>
       )}
     </li>
@@ -116,6 +146,20 @@ export default function DevicesPage() {
   const [manualMac, setManualMac] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const labels = useAccessLabels();
+  const host = useSession((st) => st.connection?.host) ?? "";
+  const thisMac = useThisDevice((st) => st.byRouter[host]);
+  const setThis = useThisDevice((st) => st.set);
+  const { data: localIp } = useLocalIp();
+  const [picking, setPicking] = useState(false);
+
+  // Exact detection when the connector knows this computer's IP.
+  useEffect(() => {
+    if (thisMac || !localIp || !data) return;
+    const me = data.find((d) => d.ipv4 === localIp);
+    if (me) setThis(host, me.mac);
+  }, [thisMac, localIp, data, host, setThis]);
+  const suggestion = !thisMac && data ? suggestThisDevice(data) : undefined;
+  const isMe = (d: Device) => d.mac === thisMac;
 
   const block = useRouterAction<{ mac: string; blocked: boolean; name: string }>((drv, v) => drv.setDeviceBlocked(v.mac, v.blocked), {
     invalidate: [qk.devices, qk.overview, qk.access],
@@ -187,7 +231,35 @@ export default function DevicesPage() {
         </Notice>
       )}
 
-      {data && <AccessModeCard devices={data} />}
+      {data && !thisMac && data.some((d) => d.online) && (
+        <Card className="mb-4 flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <p className="text-[14.5px] font-semibold">Which one is the device you&apos;re using?</p>
+            <p className="mt-0.5 text-[13px] text-muted">
+              {suggestion ? (
+                <>
+                  Looks like <b>{displayName(suggestion, names[suggestion.mac])}</b>. Confirm it so RouterDeck can warn you before you block yourself.
+                </>
+              ) : (
+                <>Mark it once so RouterDeck can warn you before you block yourself.</>
+              )}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            {suggestion && (
+              <Button size="sm" onClick={() => setThis(host, suggestion.mac)}>
+                Yes, that&apos;s me
+              </Button>
+            )}
+            <Button size="sm" variant="secondary" onClick={() => setPicking(true)}>
+              {suggestion ? "Choose another" : "Choose"}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      <Ipv6Notice what="devices" />
+      {data && <AccessModeCard devices={data} me={thisMac} />}
 
       <Card className="p-1.5 sm:p-2">
         {isLoading ? (
@@ -218,6 +290,8 @@ export default function DevicesPage() {
                 busy={pending === d.mac}
                 onBlock={() => setConfirm(d)}
                 onUnblock={() => setBlocked(d, false)}
+                isMe={isMe(d)}
+                onToggleMe={() => setThis(host, isMe(d) ? null : d.mac)}
                 onRename={() => {
                   setRename(d);
                   setRenameValue(names[d.mac] ?? d.hostname ?? "");
@@ -239,10 +313,39 @@ export default function DevicesPage() {
         onConfirm={() => confirm && setBlocked(confirm, true)}
         loading={!!confirm && pending === confirm.mac}
         tone="danger"
-        title={`Block ${confirm ? displayName(confirm, names[confirm.mac]) : ""}?`}
-        description="This device will lose internet access right away. You can unblock it any time from this page."
-        confirmLabel="Block device"
+        title={confirm && isMe(confirm) ? "Block the device you're using?" : `${labels.allow ? "Remove access for" : "Block"} ${confirm ? displayName(confirm, names[confirm.mac]) : ""}?`}
+        description={
+          confirm && isMe(confirm)
+            ? "This is the device you're using right now. It will lose internet immediately. Keep this page open, because RouterDeck still reaches your router at home, so you can undo it here. If you close it, you'll need another device to unblock this one."
+            : "This device will lose internet access right away. You can undo it any time from this page."
+        }
+        confirmLabel={confirm && isMe(confirm) ? "Yes, block my device" : labels.allow ? "Remove access" : "Block device"}
       />
+
+      <Dialog open={picking} onClose={() => setPicking(false)} size="sm" title="Which device are you using?" description="Saved in this browser only.">
+        <ul className="max-h-[50vh] space-y-1 overflow-y-auto">
+          {(data ?? [])
+            .filter((d) => d.online)
+            .map((d) => (
+              <li key={d.mac}>
+                <button
+                  onClick={() => {
+                    setThis(host, d.mac);
+                    setPicking(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition hover:bg-[var(--surface-2)]"
+                >
+                  <DeviceIcon kind={guessKind(d, names[d.mac])} className="size-9 rounded-lg" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium">{displayName(d, names[d.mac])}</span>
+                    <span className="block font-mono text-[11.5px] text-muted">{d.ipv4 ?? d.mac.toUpperCase()}</span>
+                  </span>
+                  {suggestion?.mac === d.mac && <Badge tone="brand">Likely</Badge>}
+                </button>
+              </li>
+            ))}
+        </ul>
+      </Dialog>
 
       <Dialog
         open={!!rename}

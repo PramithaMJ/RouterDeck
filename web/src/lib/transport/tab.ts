@@ -2,28 +2,40 @@ import type { NetworkInfo, RouterRequest, RouterResponse, Transport } from "./ty
 import { isPrivateHost, TransportError } from "./types";
 
 /**
- * Talks to the router through the user's own router tab (see lib/bridge.ts).
- * That tab opened this one, so we reach it via window.opener + postMessage.
+ * Talks to the router through the user's own router page (see lib/bridge.ts).
+ * Either RouterDeck runs inside that page (iframe → window.parent) or the
+ * page opened RouterDeck in a new tab (window.opener).
  */
 let bridgeOrigin: string | null = null;
 let seq = 0;
 
 function opener(): Window | null {
+  if (typeof window === "undefined") return null;
   try {
-    return typeof window !== "undefined" && window.opener && !window.opener.closed ? (window.opener as Window) : null;
+    if (window.parent && window.parent !== window) return window.parent;
+    return window.opener && !window.opener.closed ? (window.opener as Window) : null;
   } catch {
     return null;
   }
 }
 
+/** True when RouterDeck is shown inside another page (iframe). */
+export function isFramed(): boolean {
+  try {
+    return typeof window !== "undefined" && window.top !== window;
+  } catch {
+    return true;
+  }
+}
+
 function call<T>(type: string, payload: unknown, timeoutMs: number, target = bridgeOrigin): Promise<T> {
   const win = opener();
-  if (!win || !target) return Promise.reject(new TransportError("The router tab was closed. Open your router page and click the RouterDeck bookmark again.", "unavailable"));
+  if (!win || !target) return Promise.reject(new TransportError("The router page was closed. Open your router page and tap the RouterDeck bookmark again.", "unavailable"));
   return new Promise<T>((resolve, reject) => {
     const id = `t${Date.now().toString(36)}${++seq}`;
     const timer = window.setTimeout(() => {
       window.removeEventListener("message", onMsg);
-      reject(new TransportError("The router tab didn't answer. Is it still open?", "timeout"));
+      reject(new TransportError(type === "request" ? "The router took too long to answer." : "The router page didn't answer. Is it still open?", "timeout"));
     }, timeoutMs);
     function onMsg(ev: MessageEvent) {
       if (ev.source !== win) return;
@@ -66,10 +78,10 @@ export function tabBridgeOrigin() {
 
 export class TabTransport implements Transport {
   readonly kind = "tab" as const;
-  readonly label = "Router tab";
+  readonly label = "Router page";
 
   request(req: RouterRequest): Promise<RouterResponse> {
-    return call<RouterResponse>("request", req, (req.timeoutMs ?? 15000) + 3000);
+    return call<RouterResponse>("request", req, Math.min(req.timeoutMs ?? 15000, 60000) + 3000);
   }
 
   async resetSession(): Promise<void> {}

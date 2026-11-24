@@ -233,7 +233,7 @@ export function ConnectCard() {
           <p className="mt-1 text-[13.5px] text-muted">Pick how this page reaches the router in your home. You only set this up once.</p>
 
           <div className="mt-5 space-y-2.5" role="radiogroup" aria-label="Connection method">
-            {mobile && !conOk && (
+            {mobile && !conOk && !tabOk && (
               <button
                 onClick={() => setDialog("phone")}
                 className="bg-ink flex w-full items-center gap-3 rounded-xl p-3.5 text-left"

@@ -138,7 +138,12 @@ export const useSession = create<SessionState>((set, get) => ({
   connection: null,
 
   async refreshAvailability() {
-    const [extension, connector, tab] = await Promise.all([detectExtension(), detectConnector(), detectTabBridge()]);
+    const [extension, tab] = await Promise.all([detectExtension(), detectTabBridge()]);
+    // Only look for the connector when it could matter (avoids a noisy failed
+    // request in the console for extension / router-page users).
+    const saved = readSaved();
+    const wantConnector = (!extension && !tab) || saved?.transport === "connector" || get().phase !== "connected";
+    const connector = wantConnector ? await detectConnector() : null;
     let connectorPaired = false;
     const token = getConnectorToken();
     if (connector && token) {

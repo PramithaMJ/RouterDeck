@@ -190,6 +190,12 @@ export interface RouterDriver {
   removeBlockedSite(id: string): Promise<void>;
   changeAdminPassword(current: string, next: string): Promise<void>;
   reboot(): Promise<void>;
+  /**
+   * Many ISP routers only filter IPv4. If IPv6 is on, blocked devices and
+   * websites can slip through over IPv6. Drivers that can switch it expose this.
+   */
+  getIpv6?(): Promise<{ enabled: boolean }>;
+  setIpv6?(enabled: boolean): Promise<void>;
   getAdvancedMenu?(): Promise<AdvancedGroup[]>;
   openAdvanced?(id: string): Promise<LivePage>;
   /** Address of the router's own admin page, for "open classic page". */

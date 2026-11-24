@@ -24,3 +24,12 @@ button.small { flex: 0 0 auto; height: 30px; padding: 0 12px; font-size: 12.5px;
 ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 li { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
 .site { font-weight: 600; }
+.grow { flex: 1; min-width: 0; }
+.pill { font: 600 11px/1 ui-monospace, Menlo, monospace; padding: 5px 8px; border-radius: 999px; background: var(--border); color: var(--muted); }
+.pill.on { background: #dcfce7; color: #166534; }
+@media (prefers-color-scheme: dark) { .pill.on { background: #14532d; color: #bbf7d0; } }
+button.block { display: block; width: 100%; margin: 16px 0 8px; flex: none; }
+.small { font-size: 12px; }
+.popup footer { display: flex; gap: 14px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.popup footer a { color: var(--muted); font-size: 12px; text-decoration: none; }
+.popup footer a:hover { color: var(--text); }

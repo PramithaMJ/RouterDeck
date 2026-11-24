@@ -81,10 +81,14 @@ See [SECURITY.md](SECURITY.md) for the full security model.
    - or the **browser extension** for Chrome / Edge / Brave.
 3. RouterDeck finds your router. Sign in with the router's own username and password.
 
-**On a phone (iPhone or Android)**
-Phone browsers can't run extensions, so RouterDeck Connect on any computer at home also serves the app to your phones:
-open RouterDeck on that computer → **Settings → Use on your phone** → scan the QR code. Add it to your home screen for an app-like icon.
-On **Android without a computer**, run the connector inside [Termux](https://f-droid.org/packages/com.termux/) and open `http://127.0.0.1:47800`.
+**On a phone (iPhone or Android), nothing to install**
+1. On router.pramitha.lk tap **Router page button → Set up → iPhone/Android**, copy the code and save it as a bookmark named *RouterDeck*.
+2. Open `http://192.168.1.1` on the phone and tap the RouterDeck bookmark. RouterDeck opens inside that page, connected.
+
+Alternatives: RouterDeck Connect on a computer at home (**Settings → Use on your phone** → scan the QR), or Termux on Android.
+
+**Important: make blocking reliable.** Many ISP routers (including the SLT HG7) only filter IPv4. If IPv6 is on, blocked
+devices and websites can slip through. RouterDeck detects this and offers a one-tap **Make blocking work (turn off IPv6)**.
 
 Or click **Try the demo**. The speed test works anywhere without setup.
 

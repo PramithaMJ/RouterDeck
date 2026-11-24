@@ -12,6 +12,7 @@ export const qk = {
   wifi: ["wifi"] as const,
   sites: ["sites"] as const,
   access: ["access"] as const,
+  ipv6: ["ipv6"] as const,
 };
 
 function useDriver(): RouterDriver | null {
@@ -65,6 +66,16 @@ export function useAccessControl() {
     queryFn: () => driver!.getAccessControl!(),
     enabled: !!driver?.getAccessControl,
     staleTime: 30_000,
+  });
+}
+
+export function useIpv6() {
+  const driver = useDriver();
+  return useQuery({
+    queryKey: qk.ipv6,
+    queryFn: () => driver!.getIpv6!(),
+    enabled: !!driver?.getIpv6,
+    staleTime: 60_000,
   });
 }
 

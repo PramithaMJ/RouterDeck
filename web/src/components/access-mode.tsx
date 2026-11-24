@@ -8,14 +8,14 @@ import type { AccessMode, Device } from "@/lib/router/types";
 import { DeviceIcon } from "./device-icon";
 import { Badge, Button, Card, cn, Dialog, Notice, Skeleton } from "./ui";
 
-export function AccessModeCard({ devices }: { devices: Device[] }) {
+export function AccessModeCard({ devices, me: knownMe }: { devices: Device[]; me?: string }) {
   const { data, isLoading } = useAccessControl();
   const names = useNicknames((s) => s.names);
   const { data: localIp } = useLocalIp();
   const [open, setOpen] = useState<AccessMode | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
-  const me = useMemo(() => devices.find((d) => localIp && d.ipv4 === localIp)?.mac, [devices, localIp]);
+  const me = useMemo(() => knownMe ?? devices.find((d) => localIp && d.ipv4 === localIp)?.mac, [devices, localIp, knownMe]);
 
   const apply = useRouterAction<{ mode: AccessMode; macs: string[] }>((d, v) => d.setAccessControl!(v.mode, v.macs), {
     invalidate: [qk.access, qk.devices, qk.overview],

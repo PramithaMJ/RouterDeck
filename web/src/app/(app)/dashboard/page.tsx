@@ -8,6 +8,7 @@ import { DeviceIcon } from "@/components/device-icon";
 import { IspLogo } from "@/components/isp-badge";
 import { ispById } from "@/lib/isp";
 import { useSession } from "@/lib/session";
+import { useThisDevice } from "@/lib/this-device";
 import { Badge, Card, CardHeader, CopyButton, cn, Meter, Skeleton, StatusDot } from "@/components/ui";
 import { WifiQrDialog } from "@/components/wifi-qr";
 import { displayName, guessKind } from "@/lib/devices";
@@ -174,6 +175,8 @@ export default function DashboardPage() {
   const wifi = useWifi();
   const names = useNicknames((s) => s.names);
   const caps = useSession((s) => s.driver?.capabilities);
+  const host = useSession((s) => s.connection?.host) ?? "";
+  const thisMac = useThisDevice((s) => s.byRouter[host]);
   const [share, setShare] = useState<WifiNetwork | null>(null);
 
   const ov = overview.data;
@@ -260,7 +263,10 @@ export default function DashboardPage() {
                 <Link href="/devices/" className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-[var(--surface-2)]">
                   <DeviceIcon kind={guessKind(d, names[d.mac])} blocked={d.blocked} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-medium">{displayName(d, names[d.mac])}</p>
+                    <p className="flex items-center gap-2 truncate text-[14px] font-medium">
+                      <span className="truncate">{displayName(d, names[d.mac])}</span>
+                      {d.mac === thisMac && <Badge tone="brand">This device</Badge>}
+                    </p>
                     <p className="truncate text-[12.5px] text-muted">
                       {d.ipv4 ?? "-"} · {d.medium === "wifi" ? `Wi-Fi${d.band ? ` ${d.band}` : ""}` : d.medium === "wired" ? "Cable" : "Offline"}
                     </p>

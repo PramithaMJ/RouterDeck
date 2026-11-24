@@ -2,22 +2,32 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>RouterDeck Connect</title>
+<title>RouterDeck</title>
 <link rel="stylesheet" href="ui.css" />
 </head>
 <body class="popup">
   <header>
     <div class="logo small" aria-hidden="true">
-      <svg viewBox="0 0 64 64"><path d="M18 27a20 20 0 0 1 28 0M23 33a12.5 12.5 0 0 1 18 0" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/><circle cx="32" cy="46" r="5" fill="#f2632a"/></svg>
+      <svg viewBox="0 0 32 32"><path d="M7.5 15.5a12 12 0 0 1 17 0M11.5 19.5a6.4 6.4 0 0 1 9 0" fill="none" stroke="#f7f6f2" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="24" r="2.6" fill="#f2632a"/></svg>
     </div>
-    <div>
-      <strong>RouterDeck Connect</strong>
+    <div class="grow">
+      <strong>RouterDeck</strong>
       <div class="muted" id="ver"></div>
     </div>
+    <span class="pill" id="state">Ready</span>
   </header>
-  <h2>Allowed websites</h2>
+
+  <button id="open" class="primary block">Open RouterDeck</button>
+  <p class="muted small">Lets router.pramitha.lk talk to the router in your home. It only reaches home-network addresses you approve, and collects nothing.</p>
+
+  <h2>Approved routers</h2>
   <ul id="list"></ul>
-  <p class="muted" id="empty">No website has access yet. Open RouterDeck and connect to your router.</p>
+  <p class="muted small" id="empty">None yet. Open RouterDeck and connect; you'll be asked to approve your router once.</p>
+
+  <footer>
+    <a href="https://router.pramitha.lk/privacy/" target="_blank" rel="noopener">Privacy</a>
+    <a href="https://github.com/PramithaMJ/RouterDeck" target="_blank" rel="noopener">Source</a>
+  </footer>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@ import { CHROME_STORE_URL, CONNECT_APPS, detectPlatform, type ConnectApp } from 
 import { CONNECTOR_DOWNLOAD } from "@/lib/site";
 import { getConnectorToken, setConnectorToken, useSession } from "@/lib/session";
 import { ConnectorTransport } from "@/lib/transport/connector";
-import { Button, CopyButton, Dialog, Field, Input, Notice } from "./ui";
+import { Button, CopyButton, Dialog, Field, Input, Notice, Segmented } from "./ui";
 
 function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (
@@ -102,7 +102,7 @@ export function ConnectorSetupDialog({ open, onClose }: { open: boolean; onClose
   const refresh = useSession((s) => s.refreshAvailability);
   const availability = useSession((s) => s.availability);
   const [platform, setPlatform] = useState<ConnectApp>("windows");
-  const [manual, setManual] = useState(false);
+  const [mode, setMode] = useState<"app" | "terminal">("app");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -151,40 +151,87 @@ export function ConnectorSetupDialog({ open, onClose }: { open: boolean; onClose
       title="Get RouterDeck Connect"
       description="A small app that lets RouterDeck reach your router, from this computer and from your phones. Works with every browser."
     >
-      <ol className="space-y-5">
-        <Step n={1}>
-          <a href={app.file} className="bg-ink inline-flex h-11 items-center gap-2 rounded-lg px-5 text-[14.5px] font-medium">
-            <Download className="size-4" /> Download for {app.label}
-          </a>
-          <p className="mt-2 text-[12.5px] text-muted">
-            Other systems:{" "}
-            {(Object.keys(CONNECT_APPS) as ConnectApp[])
-              .filter((k) => k !== platform)
-              .map((k, i) => (
-                <span key={k}>
-                  {i > 0 && " · "}
-                  <a href={CONNECT_APPS[k].file} className="underline underline-offset-2 hover:text-[var(--text)]">
-                    {CONNECT_APPS[k].label}
-                  </a>
-                </span>
-              ))}
+      <Segmented
+        value={mode}
+        onChange={setMode}
+        className="mb-5 grid w-full grid-cols-2"
+        options={[
+          { value: "app", label: "Download app" },
+          { value: "terminal", label: <span className="flex items-center justify-center gap-1.5"><Terminal className="size-3.5" /> Terminal (no app)</span> },
+        ]}
+      />
+
+      {mode === "app" ? (
+        <ol className="space-y-5">
+          <Step n={1}>
+            <a href={app.file} className="bg-ink inline-flex h-11 items-center gap-2 rounded-lg px-5 text-[14.5px] font-medium">
+              <Download className="size-4" /> Download for {app.label}
+            </a>
+            <p className="mt-2 text-[12.5px] text-muted">
+              Other systems:{" "}
+              {(Object.keys(CONNECT_APPS) as ConnectApp[])
+                .filter((k) => k !== platform)
+                .map((k, i) => (
+                  <span key={k}>
+                    {i > 0 && " · "}
+                    <a href={CONNECT_APPS[k].file} className="underline underline-offset-2 hover:text-[var(--text)]">
+                      {CONNECT_APPS[k].label}
+                    </a>
+                  </span>
+                ))}
+            </p>
+          </Step>
+          <Step n={2}>
+            {mac ? (
+              <>
+                Open the downloaded zip, then <b>right-click → Open</b> on <span className="font-mono text-[13px]">RouterDeck-Connect</span> the first time (macOS asks because the app isn&apos;t from the App Store).
+              </>
+            ) : platform === "windows" ? (
+              <>
+                Double-click the file. If Windows shows &quot;Windows protected your PC&quot;, click <b>More info → Run anyway</b> (first time only).
+              </>
+            ) : (
+              <>Unzip and run <span className="font-mono text-[13px]">./RouterDeck-Connect</span>.</>
+            )}
+          </Step>
+          <Step n={3}>It opens RouterDeck already paired. Keep its window open while you use RouterDeck.</Step>
+          <p className="pl-9 text-[12.5px] text-muted">
+            Antivirus or your Mac blocking it? The app is open source and unsigned, so some security tools are cautious. Use the <b>Terminal</b> tab instead: same thing, no app.
           </p>
-        </Step>
-        <Step n={2}>
-          {mac ? (
-            <>
-              Open the downloaded zip, then <b>right-click → Open</b> on <span className="font-mono text-[13px]">RouterDeck-Connect</span> the first time (macOS asks because the app isn&apos;t from the App Store).
-            </>
-          ) : platform === "windows" ? (
-            <>
-              Double-click the downloaded file. If Windows shows &quot;Windows protected your PC&quot;, click <b>More info → Run anyway</b> (only the first time).
-            </>
-          ) : (
-            <>Unzip and run <span className="font-mono text-[13px]">./RouterDeck-Connect</span>.</>
-          )}
-        </Step>
-        <Step n={3}>It opens RouterDeck in your browser, already paired. Keep its window open while you use RouterDeck. That&apos;s it.</Step>
-      </ol>
+        </ol>
+      ) : (
+        <ol className="space-y-5">
+          <Step n={1}>
+            Install{" "}
+            <a href="https://nodejs.org/en/download" target="_blank" rel="noopener" className="font-medium underline underline-offset-4">
+              Node.js
+            </a>{" "}
+            (free, one time) if you don&apos;t have it.
+          </Step>
+          <Step n={2}>
+            Open <b>Terminal</b> (Mac/Linux) and paste:
+            <Code>{`curl -fsSLO ${CONNECTOR_DOWNLOAD} && node routerdeck-connector.mjs --lan --open`}</Code>
+            <span className="mt-2 block">
+              On <b>Windows</b>, open PowerShell and paste:
+            </span>
+            <Code>{`iwr ${CONNECTOR_DOWNLOAD} -OutFile routerdeck-connector.mjs; node routerdeck-connector.mjs --lan --open`}</Code>
+          </Step>
+          <Step n={3}>
+            It opens RouterDeck already paired. If it doesn&apos;t, copy the <b>pairing code</b> it prints and paste it here:
+            <div className="mt-3">
+              <Field label="Pairing code" htmlFor="pair" error={error}>
+                <div className="flex gap-2">
+                  <Input id="pair" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. 7KQ2-M9XD-P4TA" autoComplete="off" spellCheck={false} className="font-mono" />
+                  <Button onClick={pair} loading={busy} disabled={!code.trim()} size="lg" className="h-11 shrink-0">
+                    Pair
+                  </Button>
+                </div>
+              </Field>
+            </div>
+          </Step>
+          <p className="pl-9 text-[12.5px] text-muted">Next time, just run <span className="font-mono">node routerdeck-connector.mjs --lan --open</span> again. Keep the Terminal window open while you use RouterDeck.</p>
+        </ol>
+      )}
 
       <div className="mt-6 flex items-center gap-3 rounded-lg border border-subtle px-4 py-3 text-[13.5px]" aria-live="polite">
         {availability?.connectorPaired ? (
@@ -201,26 +248,6 @@ export function ConnectorSetupDialog({ open, onClose }: { open: boolean; onClose
           </>
         )}
       </div>
-
-      <button onClick={() => setManual((m) => !m)} className="mt-5 inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-[var(--text)]">
-        <Terminal className="size-3.5" /> {manual ? "Hide" : "Prefer the terminal, or need to enter a code?"}
-      </button>
-      {manual && (
-        <div className="mt-3 space-y-4">
-          <div className="text-[13.5px]">
-            With Node.js installed:
-            <Code>{`curl -fsSLO ${CONNECTOR_DOWNLOAD} && node routerdeck-connector.mjs --lan --open`}</Code>
-          </div>
-          <Field label="Pairing code" htmlFor="pair" error={error} hint="Shown in the connector window.">
-            <div className="flex gap-2">
-              <Input id="pair" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. 7KQ2-M9XD-P4TA" autoComplete="off" spellCheck={false} className="font-mono" />
-              <Button onClick={pair} loading={busy} disabled={!code.trim()} size="lg" className="h-11 shrink-0">
-                Pair
-              </Button>
-            </div>
-          </Field>
-        </div>
-      )}
     </Dialog>
   );
 }

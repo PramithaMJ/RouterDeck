@@ -17,6 +17,7 @@ import type {
   WifiPatch,
 } from "../../router/types";
 import { RouterError } from "../../router/types";
+import { TransportError } from "../../transport/types";
 import { compactMac, encodeForm, Mutex, normalizeMac, parseNumber, parsePercent, sleep } from "../../router/util";
 import { postSecurityFlag } from "./checksum";
 
@@ -39,6 +40,7 @@ const PAGES = {
   urlBlocking: "/url_blocking.asp",
   password: "/password.asp",
   reboot: "/reboot.asp",
+  ipv6: "/ipv6_enabledisable.asp",
   loginCandidates: ["/admin/login.asp", "/login.asp"],
 };
 
@@ -157,7 +159,7 @@ class RealtekBoaDriver implements RouterDriver {
   }
 
   private async get(path: string) {
-    return this.ctx.transport.request({ url: this.url(path) });
+    return this.ctx.transport.request({ url: this.url(path), timeoutMs: 30000 });
   }
 
   /** Render a page in the sandbox, failing fast if the session expired. */
@@ -194,10 +196,18 @@ class RealtekBoaDriver implements RouterDriver {
         method: cap.method === "get" ? "GET" : "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: encodeForm(pairs),
-        timeoutMs: opts.tolerateDrop ? 8000 : 20000,
+        // Some changes (MAC filter on/off, Wi-Fi) make the router reload its
+        // firewall/radio before it answers. Give it time.
+        timeoutMs: opts.tolerateDrop ? 8000 : 45000,
       });
     } catch (e) {
       if (opts.tolerateDrop) return;
+      // The router often applies the change but answers late. Wait until it's
+      // responsive again; callers then re-read state to confirm the result.
+      if (e instanceof TransportError && e.code === "timeout") {
+        await this.waitUntilResponsive();
+        return;
+      }
       throw e;
     }
     if (looksLikeLogin(res.body, res.url) && !/formLogin/.test(target)) {
@@ -208,6 +218,19 @@ class RealtekBoaDriver implements RouterDriver {
       throw new RouterError(text.replace(/\s*(OK|Back|Close)\s*$/i, "").trim(), "rejected");
     }
     return res;
+  }
+
+  /** Polls the router until it answers again (after a slow apply), up to ~60s. */
+  private async waitUntilResponsive() {
+    const until = Date.now() + 60_000;
+    while (Date.now() < until) {
+      try {
+        const r = await this.ctx.transport.request({ url: this.url(PAGES.status), timeoutMs: 8000 });
+        if (r.status < 500) return;
+      } catch {}
+      await sleep(2500);
+    }
+    throw new RouterError("Your router is taking very long to apply the change. Wait a minute, then refresh to check.", "unknown");
   }
 
   /** open → fill → click → send → dispose */
@@ -701,6 +724,25 @@ class RealtekBoaDriver implements RouterDriver {
       const box = row?.inputs.find((i) => i.type === "checkbox" && i.name);
       if (!box) return;
       await this.submit(PAGES.urlBlocking, { form: "url", button: "delFQDN", values: { [box.name]: true } });
+    });
+  }
+
+  // ---------------------------------------------------------------- IPv6 (filter bypass)
+
+  getIpv6() {
+    return this.lock.run(async () => {
+      const snap = await this.read(PAGES.ipv6);
+      return { enabled: checkedValue(snap, "ipv6enabledisable", "ipv6switch") !== "0" };
+    });
+  }
+
+  setIpv6(enabled: boolean) {
+    return this.lock.run(async () => {
+      await this.submit(PAGES.ipv6, { form: "ipv6enabledisable", button: "Apply Changes", values: { ipv6switch: enabled ? "1" : "0" } });
+      const snap = await this.read(PAGES.ipv6);
+      if ((checkedValue(snap, "ipv6enabledisable", "ipv6switch") !== "0") !== enabled) {
+        throw new RouterError("The router didn't apply the IPv6 change. Try again in a minute.", "rejected");
+      }
     });
   }
 

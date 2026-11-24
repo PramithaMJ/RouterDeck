@@ -1,4 +1,9 @@
-document.getElementById("ver").textContent = "v" + chrome.runtime.getManifest().version;
+const APP = "https://router.pramitha.lk/";
+document.getElementById("ver").textContent = "Version " + chrome.runtime.getManifest().version;
+document.getElementById("open").addEventListener("click", async () => {
+  await chrome.tabs.create({ url: APP });
+  window.close();
+});
 
 async function render() {
   const { approvals = {} } = await chrome.storage.local.get("approvals");
@@ -6,15 +11,17 @@ async function render() {
   list.textContent = "";
   const entries = Object.entries(approvals).flatMap(([site, routers]) => routers.map((r) => [site, r]));
   document.getElementById("empty").hidden = entries.length > 0;
+  document.getElementById("state").textContent = entries.length ? "Connected" : "Ready";
+  document.getElementById("state").classList.toggle("on", entries.length > 0);
   for (const [site, router] of entries) {
     const li = document.createElement("li");
     const text = document.createElement("div");
     const a = document.createElement("div");
     a.className = "site";
-    a.textContent = site.replace(/^https?:\/\//, "");
+    a.textContent = router.replace(/^https?:\/\//, "");
     const b = document.createElement("div");
-    b.className = "muted";
-    b.textContent = "→ " + router.replace(/^https?:\/\//, "");
+    b.className = "muted small";
+    b.textContent = "for " + site.replace(/^https?:\/\//, "");
     text.append(a, b);
     const btn = document.createElement("button");
     btn.className = "secondary small";

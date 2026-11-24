@@ -2,9 +2,8 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
-  X-Frame-Options: DENY
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://icons.duckduckgo.com; font-src 'self' data:; connect-src 'self' https://speed.cloudflare.com http://127.0.0.1:47800; frame-src 'self' about:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://icons.duckduckgo.com https://www.google.com https://*.gstatic.com; font-src 'self' data:; connect-src 'self' https://speed.cloudflare.com http://127.0.0.1:47800; frame-src 'self' about:; frame-ancestors 'self' http:; base-uri 'none'; object-src 'none'; form-action 'self'
 
 /downloads/*
   Content-Disposition: attachment

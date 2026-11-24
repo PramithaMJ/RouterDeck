@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "RouterDeck Connect",
-  "version": "0.3.0",
-  "description": "Lets the RouterDeck website manage the router on your home network. Private addresses only, with per-site approval.",
+  "name": "RouterDeck",
+  "version": "1.0.0",
+  "description": "Manage the router in your home from router.pramitha.lk: devices, Wi-Fi and settings. Home network only.",
   "minimum_chrome_version": "110",
   "background": {
     "service_worker": "background.js"
@@ -28,7 +28,7 @@
     "https://*/*"
   ],
   "action": {
-    "default_title": "RouterDeck Connect",
+    "default_title": "RouterDeck",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -41,5 +41,6 @@
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
-  }
+  },
+  "short_name": "RouterDeck"
 }

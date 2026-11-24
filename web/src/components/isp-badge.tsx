@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/cn";
-import { ispById, ispLogoUrl, type IspBrand } from "@/lib/isp";
+import { ispById, ispLogoUrls, type IspBrand } from "@/lib/isp";
 
 /** Provider logo tile: the ISP's own favicon on a white tile, initials as fallback. */
 export function IspLogo({ isp, size = "md", className }: { isp: IspBrand; size?: "sm" | "md" | "lg"; className?: string }) {
-  const [failed, setFailed] = useState(false);
+  const urls = ispLogoUrls(isp);
+  const [attempt, setAttempt] = useState(0);
+  const failed = attempt >= urls.length;
   const box = { sm: "size-6 rounded-md", md: "size-9 rounded-xl", lg: "size-12 rounded-2xl" }[size];
   const img = { sm: "size-4", md: "size-6", lg: "size-8" }[size];
   return (
@@ -17,7 +19,7 @@ export function IspLogo({ isp, size = "md", className }: { isp: IspBrand; size?:
         </span>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={ispLogoUrl(isp)} alt="" className={cn("object-contain", img)} referrerPolicy="no-referrer" loading="lazy" onError={() => setFailed(true)} />
+        <img key={attempt} src={urls[attempt]} alt="" className={cn("object-contain", img)} referrerPolicy="no-referrer" loading="lazy" onError={() => setAttempt((a) => a + 1)} />
       )}
     </span>
   );

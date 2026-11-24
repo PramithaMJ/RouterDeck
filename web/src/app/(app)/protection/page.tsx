@@ -3,8 +3,10 @@
 import { Globe, Info, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { PageHeader } from "@/components/app-shell";
+import { Ipv6Notice } from "@/components/ipv6-notice";
 import { Button, Card, CardHeader, cn, EmptyState, Input, Notice, Skeleton, Switch } from "@/components/ui";
 import { qk, useRouterAction, useSiteBlocking } from "@/lib/queries";
+import { groupOf, sitesFor } from "@/lib/site-groups";
 
 const SUGGESTIONS = ["tiktok.com", "youtube.com", "facebook.com", "instagram.com", "netflix.com", "roblox.com"];
 
@@ -17,12 +19,19 @@ export default function ProtectionPage() {
     pending: (on) => (on ? "Turning on website blocking…" : "Turning off website blocking…"),
     success: (on) => (on ? "Website blocking is on." : "Website blocking is off."),
   });
-  const add = useRouterAction<string>((d, s) => d.addBlockedSite(s), {
+  const add = useRouterAction<string>(async (d, s) => {
+    // Block the whole family (e.g. YouTube's video and image domains), one by one.
+    for (const domain of sitesFor(s)) await d.addBlockedSite(domain);
+  }, {
     invalidate: [qk.sites],
     pending: (s) => `Blocking ${s}…`,
     success: (s) => `${s} is now blocked on your network.`,
   });
-  const remove = useRouterAction<string>((d, s) => d.removeBlockedSite(s), {
+  const remove = useRouterAction<string>(async (d, s) => {
+    const present = new Set((data?.sites ?? []).map((x) => x.pattern));
+    for (const domain of sitesFor(s)) if (present.has(domain)) await d.removeBlockedSite(domain);
+    if (!sitesFor(s).includes(s)) await d.removeBlockedSite(s);
+  }, {
     invalidate: [qk.sites],
     pending: (s) => `Unblocking ${s}…`,
     success: (s) => `${s} is allowed again.`,
@@ -41,11 +50,18 @@ export default function ProtectionPage() {
     } catch {}
   }
 
-  const sites = data?.sites ?? [];
+  const allSites = data?.sites ?? [];
+  // Show related domains under their main site instead of as separate rows.
+  const sites = allSites.filter((x) => {
+    const main = groupOf(x.pattern);
+    return !main || !allSites.some((y) => y.pattern === main);
+  });
+  const relatedCount = (main: string) => allSites.filter((x) => groupOf(x.pattern) === main).length;
 
   return (
     <>
       <PageHeader title="Protection" description="Block websites for everyone on your network." />
+      <Ipv6Notice what="websites" />
       {error && (
         <Notice tone="red" className="mb-4">
           {(error as Error).message}
@@ -75,7 +91,7 @@ export default function ProtectionPage() {
           </Button>
         </form>
         <div className="mt-3 flex flex-wrap gap-1.5 px-5 sm:px-6">
-          {SUGGESTIONS.filter((s) => !sites.some((x) => x.pattern === s)).map((s) => (
+          {SUGGESTIONS.filter((s) => !allSites.some((x) => x.pattern === s)).map((s) => (
             <button
               key={s}
               disabled={add.isPending}
@@ -100,7 +116,10 @@ export default function ProtectionPage() {
               {sites.map((s) => (
                 <li key={s.id} className="flex items-center gap-3 px-5 py-3 sm:px-6">
                   <img src={`https://icons.duckduckgo.com/ip3/${s.pattern}.ico`} alt="" className="size-5 rounded" loading="lazy" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
-                  <span className={cn("flex-1 truncate text-[14px] font-medium", !data?.enabled && "text-muted line-through")}>{s.pattern}</span>
+                  <span className={cn("min-w-0 flex-1 truncate text-[14px] font-medium", !data?.enabled && "text-muted line-through")}>
+                    {s.pattern}
+                    {relatedCount(s.pattern) > 0 && <span className="ml-2 font-mono text-[11.5px] font-normal text-muted">+{relatedCount(s.pattern)} related</span>}
+                  </span>
                   <Button variant="ghost" size="sm" onClick={() => remove.mutate(s.id)} loading={remove.isPending && remove.variables === s.id} aria-label={`Unblock ${s.pattern}`}>
                     {!(remove.isPending && remove.variables === s.id) && <Trash2 className="size-4" />}
                     <span className="hidden sm:inline">Remove</span>
