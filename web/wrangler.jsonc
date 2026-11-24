@@ -1,0 +1,12 @@
+{
+  // RouterDeck is a fully static site: Cloudflare serves the files in ./out.
+  // Used by "npx wrangler deploy" (Cloudflare Workers Builds or locally).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "routerdeck",
+  "compatibility_date": "2025-11-01",
+  "assets": {
+    "directory": "./out",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}
