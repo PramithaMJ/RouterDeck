@@ -291,3 +291,8 @@ export function describeError(e: unknown): string {
   if (e instanceof Error) return e.message;
   return "Something went wrong.";
 }
+
+// Local development only: lets tests drive the signed-in driver from DevTools.
+if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
+  (window as unknown as { __rdSession?: typeof useSession }).__rdSession = useSession;
+}

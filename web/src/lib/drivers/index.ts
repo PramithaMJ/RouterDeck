@@ -5,13 +5,14 @@ import { demoDriver } from "./demo";
 import { huaweiHiLink } from "./huawei-hilink";
 import { realtekBoa } from "./realtek-boa";
 import { starlink } from "./starlink";
+import { tozed } from "./tozed";
 import { zteGoform } from "./zte-goform";
 
 /**
  * Registry of supported router families. Add a new brand by implementing
  * DriverFactory (see docs/ADDING_A_ROUTER.md) and listing it here.
  */
-export const DRIVERS: DriverFactory[] = [realtekBoa, huaweiHiLink, zteGoform, starlink];
+export const DRIVERS: DriverFactory[] = [realtekBoa, huaweiHiLink, zteGoform, tozed, starlink];
 
 /** Shown on the landing page so people know what's coming. */
 export const ROADMAP = [

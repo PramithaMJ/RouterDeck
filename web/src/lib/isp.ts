@@ -47,6 +47,15 @@ const ASN: Record<number, string> = { 9329: "slt", 18001: "dialog", 14522: "star
 export function detectIsp(hints: { plmn?: string; ssids?: string[]; dns?: string[]; vendor?: string; text?: string; asn?: number }): string | undefined {
   if (hints.asn && ASN[hints.asn]) return ASN[hints.asn];
   const plmn = (hints.plmn ?? "").toLowerCase();
+  // Numeric network codes (MCC 413 = Sri Lanka).
+  const code = plmn.replace(/\D/g, "");
+  if (/^413\d\d$/.test(code)) {
+    const mnc = code.slice(3);
+    if (mnc === "01") return "mobitel";
+    if (mnc === "02" || mnc === "11") return "dialog";
+    if (mnc === "03" || mnc === "08") return "hutch";
+    if (mnc === "05") return "airtel";
+  }
   if (plmn) {
     if (/dialog/.test(plmn)) return "dialog";
     if (/slt/.test(plmn)) return "slt"; // SLT-Mobitel (the network name shows as "SLT")
