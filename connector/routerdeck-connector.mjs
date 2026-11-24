@@ -3,10 +3,16 @@
  * RouterDeck local connector: a tiny, dependency-free bridge that lets the
  * RouterDeck website talk to the router on your home network.
  *
- *   node routerdeck-connector.mjs [--origin https://your-site] [--port 47800]
+ *   node routerdeck-connector.mjs            # this computer only
+ *   node routerdeck-connector.mjs --lan      # also phones/tablets on your Wi-Fi
+ *
+ * It also serves the RouterDeck app itself at http://<this-computer>:47800,
+ * which is how phones use RouterDeck (phone browsers can't run extensions).
+ * On Android it can run on the phone itself with Termux.
  *
  * Security model
- *   - Listens on 127.0.0.1 only (not reachable from other machines).
+ *   - Listens on 127.0.0.1 only, unless --lan is given.
+ *   - Rejects requests whose Host isn't an IP/localhost (DNS-rebinding guard).
  *   - Answers only to allow-listed website origins (CORS + Origin check).
  *   - Every request needs the pairing code printed below (sent as a header,
  *     which also forces a CORS preflight, so blind cross-site posts fail).
@@ -17,14 +23,15 @@
  * Requires Node.js 18+.
  */
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
 import { networkInterfaces, platform } from "node:os";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { extname, join, normalize, resolve, sep } from "node:path";
 
-const VERSION = "0.2.0";
+const VERSION = "0.4.0";
 
 // ------------------------------------------------------------------ options
 const args = process.argv.slice(2);
@@ -40,11 +47,31 @@ Usage: node routerdeck-connector.mjs [options]
   --origin <url>   Website allowed to use this connector (repeatable).
                    Default: https://router.pramitha.lk and localhost:3000
   --port <n>       Port to listen on (default 47800)
+  --lan            Also accept phones/tablets on your Wi-Fi (needs the pairing code)
+  --local-only     Only this computer (default for the script; the app shares with phones)
+  --open / --no-open  Open RouterDeck in the browser at start (the app does by default)
+  --app <url|dir>  Where the app is served from (default https://router.pramitha.lk,
+                   or a folder with a RouterDeck build, e.g. web/out)
   --new-code       Generate a new pairing code
 `);
   process.exit(0);
 }
 const PORT = Number(flag("port", process.env.ROUTERDECK_PORT || 47800));
+// The packaged app (RouterDeck Connect for Windows/Mac/Linux) shares with phones by default.
+function detectPackaged() {
+  try {
+    const req = typeof require === "function" ? require : createRequire(import.meta.url);
+    return !!req("node:sea").isSea();
+  } catch {
+    return false;
+  }
+}
+const PACKAGED = detectPackaged();
+const LAN = !args.includes("--local-only") && (args.includes("--lan") || process.env.ROUTERDECK_LAN === "1" || PACKAGED);
+const OPEN_BROWSER = !args.includes("--no-open") && process.env.ROUTERDECK_NO_OPEN !== "1" && (PACKAGED || args.includes("--open"));
+const APP_SOURCE = flag("app", process.env.ROUTERDECK_APP || "https://router.pramitha.lk");
+const APP_DIR = !/^https?:\/\//.test(APP_SOURCE) && existsSync(APP_SOURCE) ? resolve(APP_SOURCE) : null;
+const APP_URL = APP_DIR ? null : APP_SOURCE.replace(/\/+$/, "");
 const extraOrigins = args.flatMap((a, i) => (a === "--origin" && args[i + 1] ? [args[i + 1].replace(/\/+$/, "")] : []));
 const ALLOWED_ORIGINS = new Set([
   "https://router.pramitha.lk",
@@ -239,9 +266,93 @@ async function probe(origins, timeoutMs) {
 // ------------------------------------------------------------------ server
 function send(res, status, data, origin) {
   const headers = { "content-type": "application/json", "cache-control": "no-store", vary: "Origin" };
-  if (origin && ALLOWED_ORIGINS.has(origin)) headers["access-control-allow-origin"] = origin;
+  if (origin && isAllowedOrigin(origin)) headers["access-control-allow-origin"] = origin;
   res.writeHead(status, headers);
   res.end(JSON.stringify(data));
+}
+
+// ------------------------------------------------------------------ own origins / guards
+function ownOrigins() {
+  const hosts = ["127.0.0.1", "localhost"];
+  if (LAN) for (const list of Object.values(networkInterfaces())) for (const i of list || []) if (i.family === "IPv4" && !i.internal) hosts.push(i.address);
+  return new Set(hosts.map((h) => `http://${h}:${PORT}`));
+}
+function isAllowedOrigin(origin) {
+  return ALLOWED_ORIGINS.has(origin) || ownOrigins().has(origin);
+}
+/** DNS-rebinding guard: only accept Host headers that are IPs or localhost. */
+function hostOk(host) {
+  const h = String(host || "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+  return h === "localhost" || /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(":");
+}
+const failures = new Map(); // ip -> { n, until }
+const isLoopback = (ip) => ip === "127.0.0.1" || ip === "::1" || ip === "localhost";
+function lockedOut(ip) {
+  const f = failures.get(ip);
+  return !isLoopback(ip) && !!f && f.until > Date.now();
+}
+function recordFailure(ip) {
+  // Websites can't reach the API without passing CORS, so guessing can only
+  // come from other devices on the network. Never lock out this computer.
+  if (isLoopback(ip)) return;
+  const f = failures.get(ip) || { n: 0, until: 0 };
+  f.n += 1;
+  if (f.n >= 10) {
+    f.until = Date.now() + 10 * 60_000;
+    f.n = 0;
+    log("blocked", `too many wrong pairing codes from ${ip}, locked for 10 minutes`);
+  }
+  failures.set(ip, f);
+}
+
+// ------------------------------------------------------------------ app hosting
+const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8", ".webmanifest": "application/manifest+json", ".zip": "application/zip", ".mjs": "text/javascript; charset=utf-8" };
+const appCache = new Map(); // immutable assets from the hosted app
+const APP_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "x-frame-options": "DENY",
+  "content-security-policy":
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://icons.duckduckgo.com; font-src 'self' data:; connect-src 'self' https://speed.cloudflare.com; frame-src 'self' about:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+};
+
+async function serveApp(req, res, path, search) {
+  if (APP_DIR) {
+    let rel = decodeURIComponent(path);
+    let file = normalize(join(APP_DIR, rel));
+    if (file !== APP_DIR && !file.startsWith(APP_DIR + sep)) return void res.writeHead(403).end();
+    try {
+      if (statSync(file).isDirectory()) file = join(file, "index.html");
+    } catch {
+      if (!extname(file) && existsSync(file + ".html")) file += ".html";
+      else if (!extname(file) && existsSync(join(file, "index.html"))) file = join(file, "index.html");
+    }
+    if (!existsSync(file)) file = join(APP_DIR, "404.html");
+    const body = readFileSync(file);
+    res.writeHead(file.endsWith("404.html") && !rel.endsWith("404.html") ? 404 : 200, {
+      ...APP_HEADERS,
+      "content-type": MIME[extname(file)] || "application/octet-stream",
+      "cache-control": rel.startsWith("/_next/static/") ? "public, max-age=31536000, immutable" : "no-cache",
+    });
+    return res.end(req.method === "HEAD" ? undefined : body);
+  }
+  const key = path + search;
+  if (appCache.has(key)) {
+    const c = appCache.get(key);
+    res.writeHead(200, { ...APP_HEADERS, "content-type": c.type, "cache-control": "public, max-age=31536000, immutable" });
+    return res.end(c.body);
+  }
+  try {
+    const up = await fetch(APP_URL + key, { redirect: "follow" });
+    const body = Buffer.from(await up.arrayBuffer());
+    const type = up.headers.get("content-type") || MIME[extname(path)] || "application/octet-stream";
+    if (up.ok && path.startsWith("/_next/static/")) appCache.set(key, { body, type });
+    res.writeHead(up.status, { ...APP_HEADERS, "content-type": type, "cache-control": up.headers.get("cache-control") || "no-cache" });
+    res.end(req.method === "HEAD" ? undefined : body);
+  } catch {
+    res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
+    res.end(`RouterDeck couldn't load the app from ${APP_URL}. Check this computer's internet connection, or start with --app <folder>.`);
+  }
 }
 
 function readBody(req, limit = 2_000_000) {
@@ -262,11 +373,20 @@ function readBody(req, limit = 2_000_000) {
 
 const server = createServer(async (req, res) => {
   const origin = req.headers.origin;
-  const path = (req.url || "/").split("?")[0];
+  const [path, query = ""] = (req.url || "/").split("?");
+  const ip = (req.socket.remoteAddress || "").replace(/^::ffff:/, "");
+
+  if (!hostOk(req.headers.host)) {
+    res.writeHead(421, { "content-type": "text/plain" });
+    return res.end("Use this computer's IP address (e.g. http://192.168.1.5:" + PORT + ").");
+  }
+
+  // The RouterDeck app itself (for phones and other browsers on the LAN).
+  if ((req.method === "GET" || req.method === "HEAD") && !path.startsWith("/v1/")) return serveApp(req, res, path, query ? "?" + query : "");
 
   // CORS preflight (+ Private Network Access / Local Network Access)
   if (req.method === "OPTIONS") {
-    if (!origin || !ALLOWED_ORIGINS.has(origin)) {
+    if (!origin || !isAllowedOrigin(origin)) {
       res.writeHead(403);
       return res.end();
     }
@@ -281,7 +401,7 @@ const server = createServer(async (req, res) => {
     return res.end();
   }
 
-  if (origin && !ALLOWED_ORIGINS.has(origin)) {
+  if (origin && !isAllowedOrigin(origin)) {
     log("blocked", `request from unknown website ${origin}`);
     return send(res, 403, { ok: false, error: "This website is not allowed. Start the connector with --origin " + origin, code: "not-allowed" });
   }
@@ -289,7 +409,12 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && path === "/v1/hello") return send(res, 200, { app: "routerdeck-connector", version: VERSION }, origin);
 
   if (req.method !== "POST") return send(res, 404, { ok: false, error: "Not found" }, origin);
-  if (req.headers["x-routerdeck-token"] !== TOKEN) return send(res, 401, { ok: false, error: "Wrong pairing code.", code: "unauthorized" }, origin);
+  if (lockedOut(ip)) return send(res, 429, { ok: false, error: "Too many wrong pairing codes. Try again in 10 minutes.", code: "unauthorized" }, origin);
+  if (req.headers["x-routerdeck-token"] !== TOKEN) {
+    recordFailure(ip);
+    return send(res, 401, { ok: false, error: "The pairing code doesn't match this connector. Pair again with the code it shows.", code: "unauthorized" }, origin);
+  }
+  failures.delete(ip);
 
   let payload = {};
   try {
@@ -301,7 +426,7 @@ const server = createServer(async (req, res) => {
   if (path === "/v1/verify") return send(res, 200, { ok: true, result: { version: VERSION } }, origin);
   if (path === "/v1/network") {
     const gw = await defaultGateway();
-    return send(res, 200, { ok: true, result: { gateway: gw && isPrivateHost(gw) ? gw : undefined, localIp: localIp() } }, origin);
+    return send(res, 200, { ok: true, result: { gateway: gw && isPrivateHost(gw) ? gw : undefined, localIp: localIp(), lan: LAN, port: PORT } }, origin);
   }
   if (path === "/v1/probe") return send(res, 200, { ok: true, result: await probe(payload.origins, payload.timeoutMs) }, origin);
   if (path === "/v1/reset") {
@@ -334,15 +459,32 @@ server.on("error", (e) => {
   process.exit(1);
 });
 
-server.listen(PORT, "127.0.0.1", () => {
+server.listen(PORT, LAN ? "0.0.0.0" : "127.0.0.1", () => {
   const site = extraOrigins[0] || [...ALLOWED_ORIGINS].find((o) => o.startsWith("https://")) || "http://localhost:3000";
+  const ip = localIp();
+  const phone = LAN && ip ? `http://${ip}:${PORT}` : null;
   console.log(`
-  ${bold("RouterDeck connector")} v${VERSION} ${green("● running")} on http://127.0.0.1:${PORT}
+  ${bold("RouterDeck connector")} v${VERSION} ${green("● running")}
 
   Pairing code:  ${bold(TOKEN)}
-  Or open:       ${site}/#pair=${TOKEN}
 
-  ${dim("Allowed websites: " + [...ALLOWED_ORIGINS].join(", "))}
-  ${dim("Keep this window open while you use RouterDeck. Ctrl+C to stop.")}
+  On this computer:   ${site}/#pair=${TOKEN}
+                      ${dim(`or http://127.0.0.1:${PORT}/#pair=${TOKEN}`)}
+${
+  phone
+    ? `  On your phone:      ${bold(`${phone}/#pair=${TOKEN}`)}
+                      ${dim("(same Wi-Fi). Easiest: open RouterDeck on this computer → Settings → Use on your phone → scan the QR.")}`
+    : `  ${dim("Want to use your phone too? Restart with --lan")}`
+}
+
+  ${dim("App served from: " + (APP_DIR ?? APP_URL))}
+  ${dim("Keep this window open while you use RouterDeck. Close it (or Ctrl+C) to stop.")}
 `);
+  if (OPEN_BROWSER) openBrowser(`${site}/#pair=${TOKEN}`);
 });
+
+function openBrowser(url) {
+  const os = platform();
+  const [cmd, cmdArgs] = os === "darwin" ? ["open", [url]] : os === "win32" ? ["cmd", ["/c", "start", "", url]] : ["xdg-open", [url]];
+  execFile(cmd, cmdArgs, () => undefined);
+}

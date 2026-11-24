@@ -15,12 +15,15 @@ export function BuiltByFooter() {
             <span className="text-muted">Designed &amp; built by</span>
             <span className="font-semibold underline decoration-[var(--border)] underline-offset-4 group-hover:decoration-[var(--text)]">Pramitha Jayasooriya</span>
           </a>
-          <div className="flex gap-4 text-muted">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted">
             <a href="https://pramitha.lk" target="_blank" rel="noopener" className="hover:text-[var(--text)]">
               pramitha.lk
             </a>
             <a href="https://github.com/PramithaMJ/RouterDeck" target="_blank" rel="noopener" className="hover:text-[var(--text)]">
               GitHub
+            </a>
+            <a href="/privacy/" className="hover:text-[var(--text)]">
+              Privacy
             </a>
             <a href="https://github.com/PramithaMJ/RouterDeck/blob/main/SECURITY.md" target="_blank" rel="noopener" className="hover:text-[var(--text)]">
               Security

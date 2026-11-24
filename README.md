@@ -31,6 +31,7 @@ Starlink and more.
 | **All settings** | *Every* page of the router's own admin UI (DHCP, port forwarding, DMZ, UPnP, IPv6, diagnostics…) re-rendered as clean, modern forms |
 | **Line health** | Fiber Rx/Tx power, 4G signal (RSRP/SINR/bars), Starlink latency and obstructions |
 | **Admin** | Change the router password, restart safely |
+| **Phones** | Full app on iPhone & Android via RouterDeck Connect (QR pairing), installable to the home screen |
 | **Design** | Light & dark mode, works on phones and desktops |
 
 ## Supported routers
@@ -67,13 +68,23 @@ See [SECURITY.md](SECURITY.md) for the full security model.
 
 ## Use it
 
+**On a computer**
 1. Open **<https://router.pramitha.lk>** on a computer connected to your home Wi-Fi.
-2. Install a bridge (one time):
-   - **Extension** (Chrome, Edge, Brave): download from the site → `chrome://extensions` → Developer mode → *Load unpacked*.
-   - **Connector** (any browser, Node 18+): `node routerdeck-connector.mjs`. It prints a pairing link.
+2. Pick one helper (one time):
+   - **RouterDeck Connect** app: [Windows](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Connect-Windows.exe) ·
+     [Mac (Apple Silicon)](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Connect-macOS-AppleSilicon.zip) ·
+     [Mac (Intel)](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Connect-macOS-Intel.zip) ·
+     [Linux](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Connect-Linux.zip).
+     Double-click it; it opens RouterDeck already paired.
+   - or the **browser extension** for Chrome / Edge / Brave.
 3. RouterDeck finds your router. Sign in with the router's own username and password.
 
-Or click **Try the demo** to explore with a simulated router. The speed test works without any setup.
+**On a phone (iPhone or Android)**
+Phone browsers can't run extensions, so RouterDeck Connect on any computer at home also serves the app to your phones:
+open RouterDeck on that computer → **Settings → Use on your phone** → scan the QR code. Add it to your home screen for an app-like icon.
+On **Android without a computer**, run the connector inside [Termux](https://f-droid.org/packages/com.termux/) and open `http://127.0.0.1:47800`.
+
+Or click **Try the demo**. The speed test works anywhere without setup.
 
 ## Development
 

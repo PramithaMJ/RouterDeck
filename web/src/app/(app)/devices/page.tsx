@@ -19,32 +19,39 @@ function DeviceRow({ d, onBlock, onUnblock, onRename, busy }: { d: Device; onBlo
   const [open, setOpen] = useState(false);
   const name = displayName(d, names[d.mac]);
   return (
-    <li className={cn("rounded-2xl transition", open && "bg-[var(--surface-2)]")}>
-      <div className="flex items-center gap-3 px-3 py-3 sm:px-4">
-        <DeviceIcon kind={guessKind(d, names[d.mac])} blocked={d.blocked} />
+    <li className={cn("rounded-xl transition", open && "bg-[var(--surface-2)]")}>
+      <div className="flex items-center gap-3 px-2.5 py-3 sm:px-4">
+        <DeviceIcon kind={guessKind(d, names[d.mac])} blocked={d.blocked} className="size-10 sm:size-11" />
         <button className="min-w-0 flex-1 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           <div className="flex items-center gap-2">
             <p className="truncate text-[14.5px] font-medium">{name}</p>
-            {d.blocked && <Badge tone="red">{labels.blockedBadge}</Badge>}
-          </div>
-          <p className="mt-0.5 flex items-center gap-1.5 truncate text-[12.5px] text-muted">
-            {d.medium === "wifi" ? <Wifi className="size-3.5" /> : d.medium === "wired" ? <Cable className="size-3.5" /> : null}
-            {d.online ? (
-              <>
-                {d.medium === "wifi" ? `Wi-Fi${d.band ? ` ${d.band}` : ""}` : d.medium === "wired" ? "Cable" : "Connected"}
-                {d.ipv4 && <span className="font-mono">· {d.ipv4}</span>}
-              </>
-            ) : (
-              "Not connected"
+            {d.blocked && (
+              <Badge tone="red" className="hidden shrink-0 sm:inline-flex">
+                {labels.blockedBadge}
+              </Badge>
             )}
+          </div>
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted">
+            {d.blocked && <span className="shrink-0 font-medium text-rose-600 sm:hidden dark:text-rose-400">{labels.blockedBadge} ·</span>}
+            {d.medium === "wifi" ? <Wifi className="size-3.5 shrink-0" /> : d.medium === "wired" ? <Cable className="size-3.5 shrink-0" /> : null}
+            <span className="truncate">
+              {d.online ? (
+                <>
+                  {d.medium === "wifi" ? `Wi-Fi${d.band ? ` ${d.band}` : ""}` : d.medium === "wired" ? "Cable" : "Connected"}
+                  {d.ipv4 && <span className="font-mono"> · {d.ipv4}</span>}
+                </>
+              ) : (
+                "Not connected"
+              )}
+            </span>
           </p>
         </button>
         {d.blocked ? (
-          <Button size="sm" variant="success" onClick={onUnblock} loading={busy} className="shrink-0">
+          <Button size="sm" variant="success" onClick={onUnblock} loading={busy} className="shrink-0 px-2.5 sm:px-3">
             {!busy && <Check className="size-4" />} {labels.unblockLabel}
           </Button>
         ) : (
-          <Button size="sm" variant="soft-danger" onClick={onBlock} loading={busy} className="shrink-0">
+          <Button size="sm" variant="soft-danger" onClick={onBlock} loading={busy} className="shrink-0 px-2.5 sm:px-3">
             {!busy && <Ban className="size-4" />} {labels.blockLabel}
           </Button>
         )}

@@ -40,6 +40,9 @@ export interface NetworkInfo {
   /** Default gateway of the computer running the bridge, if known. */
   gateway?: string;
   localIp?: string;
+  /** Connector started with --lan (phones on the Wi-Fi can use it). */
+  lan?: boolean;
+  port?: number;
 }
 
 export interface Transport {

@@ -42,6 +42,7 @@ const PAGES = {
   loginCandidates: ["/admin/login.asp", "/login.asp"],
 };
 
+const ALREADY_LOGGED_IN = /logined|logout at first|already (logged|login)|another user/i;
 const ERROR_WORDS = /\b(error|fail(ed|ure)?|invalid|incorrect|wrong|not allowed|denied|exceed(ed)?|duplicate|already exist|cannot|can't|illegal)\b/i;
 
 function looksLikeLogin(body: string, url = "") {
@@ -225,41 +226,83 @@ class RealtekBoaDriver implements RouterDriver {
 
   async login(username: string, password: string): Promise<void> {
     return this.lock.run(async () => {
-      let loginPath: string | null = null;
-      const home = await this.get("/");
-      if (looksLikeLogin(home.body, home.url)) loginPath = new URL(home.url).pathname === "/" ? null : new URL(home.url).pathname;
-      if (!loginPath) {
-        for (const p of PAGES.loginCandidates) {
-          const r = await this.get(p).catch(() => null);
-          if (r && r.status < 400 && /cmlogin/i.test(r.body)) {
-            loginPath = p;
-            break;
+      // Already signed in (e.g. the browser shares a session with an open router tab)?
+      // Use it. A second sign-in would be refused ("you have logined!").
+      if (await this.checkSession()) return;
+      try {
+        await this.submitLogin(username, password);
+      } catch (e) {
+        if (!(e instanceof RouterError) || !ALREADY_LOGGED_IN.test(e.message)) throw e;
+        // The router allows one admin at a time. Ask it to end that session, then retry once.
+        await this.forceLogout();
+        try {
+          await this.submitLogin(username, password);
+        } catch (e2) {
+          if (e2 instanceof RouterError && ALREADY_LOGGED_IN.test(e2.message)) {
+            throw new RouterError(
+              "Your router allows only one sign-in at a time and someone is already signed in, often the router's own page (192.168.1.1) in another tab or device. Sign out or close it there, or wait about 5 minutes for the router to end it, then try again.",
+              "auth",
+            );
           }
+          throw e2;
         }
       }
-      if (!loginPath) {
-        if (!looksLikeLogin(home.body, home.url)) return; // already signed in
-        loginPath = "/";
-      }
-      const page = await RouterPage.open(this.ctx.transport, this.url(loginPath));
-      let cap: CapturedSubmit;
+    });
+  }
+
+  private async findLoginPath(): Promise<string> {
+    const home = await this.get("/");
+    if (looksLikeLogin(home.body, home.url) && new URL(home.url).pathname !== "/") return new URL(home.url).pathname;
+    for (const p of PAGES.loginCandidates) {
+      const r = await this.get(p).catch(() => null);
+      if (r && r.status < 400 && /cmlogin/i.test(r.body)) return p;
+    }
+    return "/";
+  }
+
+  private async submitLogin(username: string, password: string) {
+    const loginPath = await this.findLoginPath();
+    const page = await RouterPage.open(this.ctx.transport, this.url(loginPath));
+    let cap: CapturedSubmit;
+    try {
+      cap = await page.capture({ form: "cmlogin", button: "save", values: { username, password } });
+    } finally {
+      page.dispose();
+    }
+    if (!cap.submitted) throw new RouterError(cap.alerts.join(" ") || "Enter your username and password.", "validation");
+    const res = await this.send(page.url, cap).catch((e: Error) => {
+      throw new RouterError(e.message || "Sign-in failed.", "auth");
+    });
+    const text = res ? htmlToText(res.body) : "";
+    if (ALREADY_LOGGED_IN.test(text)) throw new RouterError(text.slice(0, 200), "auth");
+    if (!(await this.checkSession())) {
+      throw new RouterError(/locked|too many|try again later/i.test(text) ? text.slice(0, 200) : "Wrong username or password.", "auth");
+    }
+  }
+
+  /** Best effort: end the router's current admin session. */
+  private async forceLogout() {
+    const tryPage = async (path: string) => {
+      const r = await this.get(path).catch(() => null);
+      if (!r || r.status >= 400 || !/formLogout/i.test(r.body)) return false;
+      const page = await RouterPage.open(this.ctx.transport, this.url(path), { html: r.body });
       try {
-        cap = await page.capture({ form: "cmlogin", button: "save", values: { username, password } });
+        const snap = await page.snapshot();
+        const form = snap.forms.find((f) => /formLogout/i.test(f.action));
+        if (!form) return false;
+        const btn = form.fields.find((f) => f.type === "submit" || f.type === "button");
+        const cap = await page.capture({ form: form.index, button: btn?.name || btn?.text || "save" });
+        await this.send(page.url, cap, { tolerateDrop: true }).catch(() => undefined);
+        return true;
       } finally {
         page.dispose();
       }
-      if (!cap.submitted) throw new RouterError(cap.alerts.join(" ") || "Enter your username and password.", "validation");
-      const res = await this.send(page.url, cap).catch((e: Error) => {
-        throw new RouterError(e.message || "Sign-in failed.", "auth");
-      });
-      if (!(await this.checkSession())) {
-        const hint = res ? htmlToText(res.body).slice(0, 200) : "";
-        throw new RouterError(
-          /locked|too many|try again later/i.test(hint) ? hint : "Wrong username or password.",
-          "auth",
-        );
-      }
-    });
+    };
+    if (await tryPage("/admin/logout.asp")) return;
+    if (await tryPage("/")) return;
+    await this.ctx.transport
+      .request({ url: this.url("/boaform/admin/formLogout"), method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "save=Logout&submit-url=%2Fadmin%2Flogin.asp", timeoutMs: 6000 })
+      .catch(() => undefined);
   }
 
   private async checkSession() {

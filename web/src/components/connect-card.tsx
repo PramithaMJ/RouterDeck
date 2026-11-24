@@ -4,10 +4,15 @@ import { ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, ExternalLink, Lock, 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ispById } from "@/lib/isp";
-import { describeError, getConnectorToken, useSession, type Identified } from "@/lib/session";
+import { describeError, useSession, type Identified } from "@/lib/session";
+import { CHROME_STORE_URL } from "@/lib/downloads";
 import type { TransportKind } from "@/lib/transport/types";
 import { IspBadge, IspLogo } from "./isp-badge";
 import { ConnectorSetupDialog, ExtensionSetupDialog } from "./setup-dialogs";
+import { PhoneSetup } from "./phone-setup";
+import { isMobileDevice } from "@/lib/site";
+import { servedByConnector } from "@/lib/transport/connector";
+import { Dialog } from "./ui";
 import { Badge, Button, Card, cn, Field, Input, Notice, PasswordInput, Spinner } from "./ui";
 
 const PRESETS = ["192.168.1.1", "192.168.8.1", "192.168.0.1", "192.168.100.1", "10.0.0.1"];
@@ -81,7 +86,7 @@ function FoundRouter({ r, method }: { r: Identified; method: Method }) {
 
 export function ConnectCard() {
   const router = useRouter();
-  const { phase, availability, saved, identify, discover, signIn, refreshAvailability } = useSession();
+  const { phase, availability, saved, identify, discover, signIn, resume, refreshAvailability } = useSession();
   const [method, setMethod] = useState<Method | null>(null);
   const [host, setHost] = useState("192.168.1.1");
   const [manual, setManual] = useState(false);
@@ -92,12 +97,18 @@ export function ConnectCard() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | "detect" | "login">(null);
-  const [dialog, setDialog] = useState<null | "extension" | "connector">(null);
+  const [dialog, setDialog] = useState<null | "extension" | "connector" | "phone">(null);
+  const [mobile, setMobile] = useState(false);
+  const [phoneMode, setPhoneMode] = useState(false);
+  useEffect(() => {
+    setMobile(isMobileDevice() && !servedByConnector());
+    setPhoneMode(servedByConnector());
+  }, [availability]);
   const scannedFor = useRef<string | null>(null);
 
   const extOk = !!availability?.extension;
   const conOk = !!availability?.connector;
-  const conPaired = conOk && !!getConnectorToken();
+  const conPaired = !!availability?.connectorPaired;
   const checking = phase === "booting" || !availability;
 
   const ready = useCallback((m: Method | null) => m === "demo" || (m === "extension" && extOk) || (m === "connector" && conPaired), [extOk, conPaired]);
@@ -169,6 +180,12 @@ export function ConnectCard() {
     setFound(r);
     setUsername(r.defaultUsername ?? "admin");
     if (method === "demo") setPassword("admin");
+    if (method !== "demo" && r.requiresLogin) {
+      setBusy("login");
+      const reused = await resume(method, r).catch(() => false);
+      setBusy(null);
+      if (reused) return;
+    }
     if (!r.requiresLogin) {
       setBusy("login");
       try {
@@ -209,10 +226,24 @@ export function ConnectCard() {
           <p className="mt-1 text-[13.5px] text-muted">Pick how this page reaches the router in your home. You only set this up once.</p>
 
           <div className="mt-5 space-y-2.5" role="radiogroup" aria-label="Connection method">
-            <MethodRow
+            {mobile && !conOk && (
+              <button
+                onClick={() => setDialog("phone")}
+                className="bg-ink flex w-full items-center gap-3 rounded-xl p-3.5 text-left"
+              >
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white/10">
+                  <Router className="size-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14.5px] font-medium">Manage your router from this phone</span>
+                  <span className="mt-0.5 block text-[12.5px] opacity-70">Takes a one-time setup on a computer or with Termux on Android. See how →</span>
+                </span>
+              </button>
+            )}
+            {!mobile && !phoneMode && <MethodRow
               icon={<Puzzle className="size-5" />}
               title="Browser extension"
-              subtitle="Recommended. One-time install for Chrome, Edge or Brave."
+              subtitle={CHROME_STORE_URL ? "Recommended. One click from the Chrome Web Store." : "For Chrome, Edge and Brave (manual install for now)."}
               selected={method === "extension"}
               onSelect={() => setMethod("extension")}
               status={checking ? <Spinner className="size-3.5" /> : extOk ? <Badge tone="green">Installed</Badge> : <Badge>Not installed</Badge>}
@@ -223,17 +254,17 @@ export function ConnectCard() {
                   </Button>
                 ) : undefined
               }
-            />
+            />}
             <MethodRow
               icon={<Terminal className="size-5" />}
-              title="Local connector"
-              subtitle="A tiny Node.js program. Works with any browser and finds your router exactly."
+              title="RouterDeck Connect"
+              subtitle={`${CHROME_STORE_URL ? "" : "Recommended. "}Small app for Windows, Mac and Linux. Works in every browser and lets your phones join.`}
               selected={method === "connector"}
               onSelect={() => setMethod("connector")}
-              status={checking ? <Spinner className="size-3.5" /> : conPaired ? <Badge tone="green">Paired</Badge> : conOk ? <Badge tone="amber">Needs pairing</Badge> : <Badge>Not running</Badge>}
+              status={checking ? <Spinner className="size-3.5" /> : conPaired ? <Badge tone="green">Connected</Badge> : conOk ? <Badge tone="amber">Needs pairing</Badge> : <Badge>Not running</Badge>}
               action={
                 !conPaired && !checking ? (
-                  <Button size="sm" variant="secondary" onClick={(e) => (e.stopPropagation(), setDialog("connector"))}>
+                  <Button size="sm" variant="secondary" onClick={(e) => (e.stopPropagation(), setDialog(mobile ? "phone" : "connector"))}>
                     Set up
                   </Button>
                 ) : undefined
@@ -377,6 +408,9 @@ export function ConnectCard() {
       )}
 
       <ExtensionSetupDialog open={dialog === "extension"} onClose={() => setDialog(null)} />
+      <Dialog open={dialog === "phone"} onClose={() => setDialog(null)} size="lg" title="Use RouterDeck on your phone" description="Phones can't install browser extensions, so a small helper runs once on a device at home.">
+        <PhoneSetup compact />
+      </Dialog>
       <ConnectorSetupDialog open={dialog === "connector"} onClose={() => (setDialog(null), refreshAvailability())} />
     </Card>
   );

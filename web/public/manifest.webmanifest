@@ -1,0 +1,21 @@
+{
+  "name": "RouterDeck",
+  "short_name": "RouterDeck",
+  "description": "Manage your home router: devices, Wi-Fi, speed test and every setting.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f6f2",
+  "theme_color": "#f7f6f2",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Speed test", "url": "/speed-test/", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Devices", "url": "/devices/", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

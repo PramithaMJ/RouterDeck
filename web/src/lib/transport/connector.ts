@@ -10,28 +10,65 @@ import { TransportError } from "./types";
  */
 export const DEFAULT_CONNECTOR_URL = "http://127.0.0.1:47800";
 
-export async function detectConnector(baseUrl = DEFAULT_CONNECTOR_URL, timeoutMs = 800): Promise<{ version: string } | null> {
+let detectedBase: string | null = null;
+
+/**
+ * Where the connector lives. When the app itself was served by the connector
+ * (phones on the LAN: http://192.168.1.5:47800) it's simply this page's origin.
+ */
+export function connectorBaseUrl(): string {
+  return detectedBase ?? DEFAULT_CONNECTOR_URL;
+}
+
+/** True when this page is being served by a RouterDeck connector (phone mode). */
+export function servedByConnector(): boolean {
+  return detectedBase !== null && typeof window !== "undefined" && detectedBase === window.location.origin;
+}
+
+async function hello(base: string, timeoutMs: number) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    const res = await fetch(`${baseUrl}/v1/hello`, { signal: ctrl.signal });
-    clearTimeout(t);
+    const res = await fetch(`${base}/v1/hello`, { signal: ctrl.signal, cache: "no-store" });
     if (!res.ok) return null;
     const json = (await res.json()) as { app?: string; version?: string };
     return json.app === "routerdeck-connector" ? { version: json.version ?? "?" } : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(t);
   }
+}
+
+/**
+ * Finds a running connector. If this page was served over plain http (a phone
+ * opening http://<computer>:47800), the connector is this page's own origin.
+ * Otherwise look for one on this computer.
+ */
+export async function detectConnector(timeoutMs = 800): Promise<{ version: string } | null> {
+  if (typeof window !== "undefined" && window.location.protocol === "http:") {
+    const same = await hello(window.location.origin, timeoutMs);
+    if (same) {
+      detectedBase = window.location.origin;
+      return same;
+    }
+  }
+  const r = await hello(DEFAULT_CONNECTOR_URL, timeoutMs);
+  if (r) detectedBase = DEFAULT_CONNECTOR_URL;
+  return r;
 }
 
 export class ConnectorTransport implements Transport {
   readonly kind = "connector" as const;
   readonly label = "Local connector";
 
+  private readonly baseUrl: string;
   constructor(
     private readonly token: string,
-    private readonly baseUrl = DEFAULT_CONNECTOR_URL,
-  ) {}
+    baseUrl?: string,
+  ) {
+    this.baseUrl = baseUrl ?? connectorBaseUrl();
+  }
 
   private async rpc<T>(path: string, body: unknown, timeoutMs: number): Promise<T> {
     let res: Response;

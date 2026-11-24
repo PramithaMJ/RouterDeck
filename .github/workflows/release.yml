@@ -1,0 +1,71 @@
+name: Release RouterDeck Connect
+
+# Builds the double-click "RouterDeck Connect" apps (Node single executable)
+# for Windows, macOS and Linux, and attaches them to a GitHub Release.
+# Trigger: push a tag like v0.4.0, or run manually from the Actions tab.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: RouterDeck-Connect-macOS-AppleSilicon
+          - os: macos-15-intel
+            name: RouterDeck-Connect-macOS-Intel
+          - os: windows-latest
+            name: RouterDeck-Connect-Windows
+          - os: ubuntu-latest
+            name: RouterDeck-Connect-Linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build single executable
+        shell: bash
+        run: bash connector/build-app.sh "${{ matrix.name }}"
+      - name: Package (zip keeps the executable bit on macOS/Linux)
+        shell: bash
+        run: |
+          cd connector/dist
+          if [ -f "${{ matrix.name }}.exe" ]; then
+            mv "${{ matrix.name }}.exe" ../../"${{ matrix.name }}.exe"
+          else
+            zip -9 ../../"${{ matrix.name }}.zip" "${{ matrix.name }}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            ${{ matrix.name }}.zip
+            ${{ matrix.name }}.exe
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('connect-{0}', github.run_number) }}
+        run: |
+          ls -la assets
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            && gh release upload "$TAG" assets/* --clobber --repo "$GITHUB_REPOSITORY" \
+            || gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --title "RouterDeck Connect $TAG" --generate-notes --target "$GITHUB_SHA"

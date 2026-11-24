@@ -11,7 +11,10 @@ export const metadata: Metadata = {
   description:
     "Manage your home router (SLT-Mobitel, Dialog and more) from a clean, modern dashboard. Block devices, change Wi-Fi passwords, see who's online. Your password never leaves your network.",
   applicationName: "RouterDeck",
-  icons: { icon: "/icon.svg" },
+  manifest: "/manifest.webmanifest",
+  icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }, { url: "/icon-192.png", sizes: "192x192" }], apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "RouterDeck", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {

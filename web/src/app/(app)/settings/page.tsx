@@ -3,6 +3,8 @@
 import { ChevronRight, Gauge, KeyRound, LogOut, Monitor, Moon, Plug, Power, RotateCcw, Router, ShieldCheck, SlidersHorizontal, Sun } from "lucide-react";
 import Link from "next/link";
 import { IspBadge } from "@/components/isp-badge";
+import { PhoneSetup } from "@/components/phone-setup";
+import { Smartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/app-shell";
@@ -219,6 +221,13 @@ export default function SettingsPage() {
           </div>
         </Card>
       </div>
+
+      <Card className="mt-5">
+        <CardHeader title="Use on your phone" description="Manage your router from an iPhone or Android on the same Wi-Fi." icon={<Smartphone className="size-5 text-muted" />} />
+        <div className="p-5 sm:p-6">
+          <PhoneSetup compact />
+        </div>
+      </Card>
 
       {connection?.transport !== "demo" && (
         <Notice tone="brand" className="mt-5">

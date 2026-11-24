@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { autoDetect, demoDriver, detectRouter, DRIVERS, type DetectedRouter } from "./drivers";
 import type { DriverFactory, RouterDriver } from "./router/types";
 import { RouterError } from "./router/types";
-import { ConnectorTransport, DEFAULT_CONNECTOR_URL, detectConnector } from "./transport/connector";
+import { ConnectorTransport, detectConnector } from "./transport/connector";
 import { detectExtension, ExtensionTransport } from "./transport/extension";
 import type { Transport, TransportKind } from "./transport/types";
 import { isPrivateHost, TransportError } from "./transport/types";
@@ -27,6 +27,8 @@ export interface SavedConnection {
 export interface Availability {
   extension: string | null; // version
   connector: { version: string } | null;
+  /** Connector running AND our saved pairing code is accepted. */
+  connectorPaired: boolean;
   checkedAt: number;
 }
 
@@ -67,6 +69,8 @@ interface SessionState {
   discover(kind: TransportKind, onStep?: (m: string) => void): Promise<Identified | null>;
   /** Step 2: sign in. */
   signIn(kind: TransportKind, router: Identified, username: string, password: string): Promise<void>;
+  /** Connects without a password if the router already has a valid session. */
+  resume(kind: TransportKind, router: Identified): Promise<boolean>;
   signOut(opts?: { forget?: boolean }): Promise<void>;
   /** Called when the router says the session is gone. */
   expire(): void;
@@ -115,7 +119,7 @@ function makeTransport(kind: TransportKind): Transport {
   if (kind === "connector") {
     const token = getConnectorToken();
     if (!token) throw new TransportError("Enter the pairing code shown by the RouterDeck connector.", "unauthorized");
-    return new ConnectorTransport(token, DEFAULT_CONNECTOR_URL);
+    return new ConnectorTransport(token);
   }
   if (kind === "demo") return { kind: "demo", label: "Demo", request: async () => ({ status: 200, url: "", headers: {}, body: "" }) };
   throw new Error(`Unsupported transport ${kind}`);
@@ -131,7 +135,18 @@ export const useSession = create<SessionState>((set, get) => ({
 
   async refreshAvailability() {
     const [extension, connector] = await Promise.all([detectExtension(), detectConnector()]);
-    const availability = { extension, connector, checkedAt: Date.now() };
+    let connectorPaired = false;
+    const token = getConnectorToken();
+    if (connector && token) {
+      try {
+        await new ConnectorTransport(token).verify();
+        connectorPaired = true;
+      } catch (e) {
+        // A different/new connector: forget the stale code so the user is asked to pair again.
+        if (e instanceof TransportError && e.code === "unauthorized") setConnectorToken(null);
+      }
+    }
+    const availability = { extension, connector, connectorPaired, checkedAt: Date.now() };
     set({ availability });
     return availability;
   },
@@ -192,6 +207,22 @@ export const useSession = create<SessionState>((set, get) => ({
     const connection: SavedConnection = { transport: kind, host: baseUrl, driverId: router.factory.id, model: router.model };
     writeSaved(connection);
     set({ phase: "connected", driver, transport, connection, saved: connection });
+  },
+
+  async resume(kind, router) {
+    if (kind === "demo") return false;
+    try {
+      const transport = makeTransport(kind);
+      const baseUrl = normalizeHost(router.host);
+      const driver = router.factory.create({ transport, baseUrl });
+      if (!(await driver.isLoggedIn())) return false;
+      const connection: SavedConnection = { transport: kind, host: baseUrl, driverId: router.factory.id, model: router.model };
+      writeSaved(connection);
+      set({ phase: "connected", driver, transport, connection, saved: connection });
+      return true;
+    } catch {
+      return false;
+    }
   },
 
   async signOut(opts) {
