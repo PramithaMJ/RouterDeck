@@ -433,37 +433,55 @@ class ZteGoformDriver implements RouterDriver {
     });
   }
 
-  // ---------------------------------------------------------------- guest Wi-Fi (second network)
+  // ---------------------------------------------------------------- guest Wi-Fi (extra networks)
   //
-  // The second network the radio broadcasts is stored in the SSID2 / AuthMode2 /
-  // WPAPSK2 / MAX_Access_num2 fields and saved with SET_WIFI_SSID4_SETTINGS
-  // (that's what the router's own "SSID 2" page sends). SET_WIFI_SSID2_SETTINGS
-  // writes a separate m_SSID set that the radio doesn't use. Two switches must
-  // be on: m_ssid_enable (multi-SSID) and tz_ssid2_enable (this network).
-  // There's no separate guest isolation: NoForwarding is shared with the main
-  // network, so it's left as it is.
+  // Guest pass slot 0 = the router's 2nd network, slot 1 = its 3rd. Each is
+  // stored in SSIDn / AuthModen / WPAPSKn / MAX_Access_numn and saved the way
+  // the router's own pages do it:
+  //   2nd network: SET_WIFI_SSID4_SETTINGS (MAX_Access_num2), switch wifiOrder=1
+  //   3rd network: SET_WIFI_SSID3_SETTINGS (MAX_Access_num3), switch wifiOrder=2
+  // (SET_WIFI_SSID2_SETTINGS writes an m_SSID set the radio doesn't use.)
+  // The multi-SSID master switch (m_ssid_enable) must be on too. There's no
+  // separate guest isolation: NoForwarding is shared with the main network.
 
-  private async readGuest() {
+  private static GUESTS = [
+    { n: 2, goform: "SET_WIFI_SSID4_SETTINGS", order: "1" },
+    { n: 3, goform: "SET_WIFI_SSID3_SETTINGS", order: "2" },
+  ] as const;
+
+  private guestSlot(slot = 0) {
+    return ZteGoformDriver.GUESTS[Math.min(Math.max(0, slot), ZteGoformDriver.GUESTS.length - 1)];
+  }
+
+  private async readGuest(slot = 0) {
+    const g = this.guestSlot(slot);
+    const other = ZteGoformDriver.GUESTS.find((x) => x.n !== g.n)!;
     const encode = await this.encodes();
-    const r = await this.readAuthed(["m_ssid_enable", "tz_ssid2_enable", "SSID2", "AuthMode2", "HideSSID2", "MAX_Access_num2", "MAX_Access_num", "MAX_Station_num", "NoForwarding", encode ? "WPAPSK2_encode" : "WPAPSK2"]);
-    const raw = str(encode ? r.WPAPSK2_encode : r.WPAPSK2);
+    const r = await this.readAuthed([
+      "m_ssid_enable", `tz_ssid${g.n}_enable`, `SSID${g.n}`, `AuthMode${g.n}`, `HideSSID${g.n}`, `MAX_Access_num${g.n}`,
+      `tz_ssid${other.n}_enable`, `MAX_Access_num${other.n}`, "MAX_Access_num", "MAX_Station_num", "NoForwarding",
+      encode ? `WPAPSK${g.n}_encode` : `WPAPSK${g.n}`,
+    ]);
+    const raw = str(encode ? r[`WPAPSK${g.n}_encode`] : r[`WPAPSK${g.n}`]);
+    const otherUses = str(r[`tz_ssid${other.n}_enable`]) === "1" ? (num(r[`MAX_Access_num${other.n}`]) ?? 0) : 0;
     return {
       r,
-      enabled: str(r.tz_ssid2_enable) === "1" && str(r.m_ssid_enable) === "1",
-      switchOn: str(r.tz_ssid2_enable) === "1",
-      ssid: str(r.SSID2),
+      g,
+      enabled: str(r[`tz_ssid${g.n}_enable`]) === "1" && str(r.m_ssid_enable) === "1",
+      switchOn: str(r[`tz_ssid${g.n}_enable`]) === "1",
+      ssid: str(r[`SSID${g.n}`]),
       password: raw ? (encode ? unb64(raw) : raw) : "",
-      auth: str(r.AuthMode2),
-      hidden: str(r.HideSSID2) === "1",
-      maxDevices: num(r.MAX_Access_num2),
-      // All networks share one device cap (MAX_Station_num); the main network keeps its share.
-      limitMax: Math.max(1, (num(r.MAX_Station_num) ?? 32) - (num(r.MAX_Access_num) ?? 16)),
+      auth: str(r[`AuthMode${g.n}`]),
+      hidden: str(r[`HideSSID${g.n}`]) === "1",
+      maxDevices: num(r[`MAX_Access_num${g.n}`]),
+      // All networks share one device cap (MAX_Station_num).
+      limitMax: Math.max(1, (num(r.MAX_Station_num) ?? 32) - (num(r.MAX_Access_num) ?? 16) - otherUses),
     };
   }
 
-  getGuestWifi(): Promise<GuestWifi> {
+  getGuestWifi(slot = 0): Promise<GuestWifi> {
     return this.lock.run(async () => {
-      const g = await this.readGuest();
+      const g = await this.readGuest(slot);
       return {
         enabled: g.enabled,
         ssid: g.ssid || undefined,
@@ -473,7 +491,8 @@ class ZteGoformDriver implements RouterDriver {
         canIsolate: false,
         maxDevices: g.maxDevices,
         deviceLimit: { min: 1, max: g.limitMax },
-        networkSlots: 3, // SSID 2, 3 and 4
+        networkSlots: ZteGoformDriver.GUESTS.length,
+        slot,
       };
     });
   }
@@ -483,33 +502,35 @@ class ZteGoformDriver implements RouterDriver {
       if (!cfg.ssid?.trim() || cfg.ssid.length > 32) return Promise.reject(new RouterError("Guest network name must be 1-32 characters.", "validation"));
       if (!cfg.password || cfg.password.length < 8 || cfg.password.length > 63) return Promise.reject(new RouterError("Guest password must be 8-63 characters.", "validation"));
     }
+    const slot = cfg.slot ?? 0;
     const wait = async (ok: (g: Awaited<ReturnType<ZteGoformDriver["readGuest"]>>) => boolean) => {
       // Applying restarts the Wi-Fi radio; poll until the router reports the new state.
       for (let i = 0; i < 12; i++) {
         await new Promise((r) => setTimeout(r, 2500));
-        const g = await this.readGuest().catch(() => null);
+        const g = await this.readGuest(slot).catch(() => null);
         if (g && ok(g)) return true;
       }
       return false;
     };
     return this.lock.run(async () => {
-      const cur = await this.readGuest();
+      const cur = await this.readGuest(slot);
+      const { n, goform, order } = cur.g;
       if (!cfg.enabled) {
         if (!cur.switchOn) return;
-        // Same request as the router's own page: wifiEnabled with wifiOrder=1
-        // switches the second network, not the main Wi-Fi.
-        await this.action("SET_WIFI_INFO2", { wifiEnabled: "0", wifiOrder: "1" });
+        // Same request as the router's own page: wifiEnabled with wifiOrder
+        // switches that extra network, not the main Wi-Fi.
+        await this.action("SET_WIFI_INFO2", { wifiEnabled: "0", wifiOrder: order });
         if (!(await wait((g) => !g.switchOn))) throw new RouterError("The router didn't turn the guest network off. Try again.", "rejected");
         return;
       }
       const ssid = cfg.ssid!.trim();
       const wantMax = cfg.maxDevices ? Math.min(Math.max(1, Math.round(cfg.maxDevices)), cur.limitMax) : undefined;
       if (cur.ssid !== ssid || cur.password !== cfg.password || cur.auth !== "WPA2PSK" || cur.hidden || (wantMax && wantMax !== cur.maxDevices)) {
-        const station = wantMax ?? num(cur.r.MAX_Access_num2);
-        await this.action("SET_WIFI_SSID4_SETTINGS", {
+        const station = wantMax ?? cur.maxDevices;
+        await this.action(goform, {
           ssid,
           broadcastSsidEnabled: "0", // visible
-          MAX_Access_num2: station && station > 0 ? String(station) : "8",
+          [`MAX_Access_num${n}`]: station && station > 0 ? String(Math.min(station, cur.limitMax)) : String(Math.min(8, cur.limitMax)),
           security_mode: "WPA2PSK", // WPA2-AES: works on every phone, including iPhones
           cipher: "1",
           security_shared_mode: "1",
@@ -519,7 +540,7 @@ class ZteGoformDriver implements RouterDriver {
         });
       }
       if (str(cur.r.m_ssid_enable) !== "1") await this.action("SET_WIFI_INFO", { m_ssid_enable: "1", wifiEnabled: "1" }); // main Wi-Fi stays on
-      if (!cur.switchOn) await this.action("SET_WIFI_INFO2", { m_ssid_enable: "1", wifiEnabled: "1", wifiOrder: "1" });
+      if (!cur.switchOn) await this.action("SET_WIFI_INFO2", { m_ssid_enable: "1", wifiEnabled: "1", wifiOrder: order });
       if (!(await wait((g) => g.enabled && g.ssid === ssid && g.password === cfg.password)))
         throw new RouterError("The router didn't apply the guest network. Try again in a minute.", "rejected");
     });

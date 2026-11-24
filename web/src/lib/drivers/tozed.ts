@@ -50,8 +50,10 @@ const CMD = {
   GET_NEXT_LOGIN_TIME: 232, // also hands out the login token
 } as const;
 
-/** Guest network = the router's second network on each band. */
+/** Guest pass slot i = the router's network 2+i on each band (networks 2, 3 and 4). */
 const GUEST_SUBCMD = 2;
+const GUEST_SLOTS = 3;
+const guestSubcmd = (slot = 0) => GUEST_SUBCMD + Math.min(Math.max(0, slot), GUEST_SLOTS - 1);
 const MAX_RULES = 32;
 
 type Json = Record<string, unknown>;
@@ -128,7 +130,24 @@ class TozedDriver implements RouterDriver {
   private lock = new Mutex();
   private sessionId = "";
 
-  constructor(private ctx: DriverContext) {}
+  constructor(private ctx: DriverContext) {
+    // Keep the router session across page reloads (per tab, like the router's own page).
+    try {
+      this.sessionId = sessionStorage.getItem(this.storeKey) ?? "";
+    } catch {}
+  }
+
+  private get storeKey() {
+    return `routerdeck.tozed.session:${this.ctx.baseUrl}`;
+  }
+
+  private remember(id: string) {
+    this.sessionId = id;
+    try {
+      if (id) sessionStorage.setItem(this.storeKey, id);
+      else sessionStorage.removeItem(this.storeKey);
+    } catch {}
+  }
 
   get baseUrl() {
     return this.ctx.baseUrl;
@@ -205,13 +224,13 @@ class TozedDriver implements RouterDriver {
       );
     }
     if (!r.sessionId) throw new RouterError("The router didn't accept the sign-in.", "auth");
-    this.sessionId = str(r.sessionId);
+    this.remember(str(r.sessionId));
   }
 
   async logout() {
     if (!this.sessionId) return;
     await this.call({ cmd: CMD.LOGOUT, method: "POST" }, { auth: false }).catch(() => undefined);
-    this.sessionId = "";
+    this.remember("");
   }
 
   async isLoggedIn() {
@@ -470,12 +489,13 @@ class TozedDriver implements RouterDriver {
 
   // ---------------------------------------------------------------- guest Wi-Fi (second network per band)
 
-  getGuestWifi(): Promise<GuestWifi> {
+  getGuestWifi(slot = 0): Promise<GuestWifi> {
+    const sub = guestSubcmd(slot);
     return this.lock.run(async () => {
       const bands: Band[] = [];
       let ssid = "", password = "";
       for (const { band, cmd } of this.radios()) {
-        const g = await this.readNet(cmd, GUEST_SUBCMD).catch(() => null);
+        const g = await this.readNet(cmd, sub).catch(() => null);
         if (g?.on) {
           bands.push(band);
           ssid ||= g.ssid;
@@ -489,7 +509,8 @@ class TozedDriver implements RouterDriver {
         bands,
         availableBands: ["2.4GHz", "5GHz"],
         canIsolate: false,
-        networkSlots: 3, // networks 2, 3 and 4 on each band
+        networkSlots: GUEST_SLOTS,
+        slot,
       };
     });
   }
@@ -499,13 +520,14 @@ class TozedDriver implements RouterDriver {
       if (!cfg.ssid?.trim() || cfg.ssid.length > 32) return Promise.reject(new RouterError("Guest network name must be 1-32 characters.", "validation"));
       if (!cfg.password || cfg.password.length < 8 || cfg.password.length > 63) return Promise.reject(new RouterError("Guest password must be 8-63 characters.", "validation"));
     }
+    const sub = guestSubcmd(cfg.slot);
     return this.lock.run(async () => {
       for (const { band, cmd } of this.radios()) {
-        const cur = await this.readNet(cmd, GUEST_SUBCMD).catch(() => null);
+        const cur = await this.readNet(cmd, sub).catch(() => null);
         if (!cur) continue;
         const want = cfg.enabled && (!cfg.bands?.length || cfg.bands.includes(band));
         if (!want) {
-          if (cur.on) await this.writeNet(cmd, GUEST_SUBCMD, { ...cur, on: false });
+          if (cur.on) await this.writeNet(cmd, sub, { ...cur, on: false });
           continue;
         }
         // Same security as the main network on this band (WPA2/WPA3-Personal), never open.
@@ -514,7 +536,7 @@ class TozedDriver implements RouterDriver {
         const cipherSuite = cur.cipherSuite || main.cipherSuite;
         const ssid = cfg.ssid!.trim();
         if (cur.on && cur.ssid === ssid && cur.key === cfg.password && cur.broadcast) continue;
-        await this.writeNet(cmd, GUEST_SUBCMD, { on: true, broadcast: true, ssid, key: cfg.password!, cipherSuite, auth });
+        await this.writeNet(cmd, sub, { on: true, broadcast: true, ssid, key: cfg.password!, cipherSuite, auth });
       }
     });
   }

@@ -776,7 +776,12 @@ class RealtekBoaDriver implements RouterDriver {
   // ISP (EasyMesh backhaul, PEO TV) and are never touched. Slot 3 gets its own
   // name and WPA2 password, broadcast on, "Relay Blocking" (client isolation) on.
 
+  /** Guest pass slot 0 → virtual AP 3, slot 1 → AP 4 (APs 1-2 belong to the ISP). */
   private static GUEST_SLOT = 3;
+  private static GUEST_SLOTS = 2;
+  private guestAp(slot = 0) {
+    return RealtekBoaDriver.GUEST_SLOT + Math.min(Math.max(0, slot), RealtekBoaDriver.GUEST_SLOTS - 1);
+  }
 
   private async guestBands(): Promise<{ idx: number; band: Band }[]> {
     const out: { idx: number; band: Band }[] = [];
@@ -790,8 +795,7 @@ class RealtekBoaDriver implements RouterDriver {
     return out;
   }
 
-  private async readGuestSlot(idx: number) {
-    const n = RealtekBoaDriver.GUEST_SLOT;
+  private async readGuestSlot(idx: number, n = RealtekBoaDriver.GUEST_SLOT) {
     await this.get(`/boaform/formWlanRedirect?redirect-url=${encodeURIComponent(PAGES.multiAp)}&wlan_idx=${idx}`);
     const snap = await this.read(PAGES.multiAp);
     const f = (name: string) => field(snap, "MultipleAP", name)[0];
@@ -803,29 +807,30 @@ class RealtekBoaDriver implements RouterDriver {
   }
 
   /** Opens the security page for the guest slot and returns its live state. */
-  private async openGuestSecurity(idx: number) {
+  private async openGuestSecurity(idx: number, n = RealtekBoaDriver.GUEST_SLOT) {
     await this.selectRadio(idx);
     const page = await this.open(PAGES.wlanSecurity);
     const snap = await page.snapshot();
     const sel = field(snap, "formEncrypt", "wpaSSID")[0];
-    const opt = sel?.options?.find((o) => new RegExp(`AP\\s*${RealtekBoaDriver.GUEST_SLOT}\\b`, "i").test(o.label) || o.value === String(RealtekBoaDriver.GUEST_SLOT));
+    const opt = sel?.options?.find((o) => new RegExp(`AP\\s*${n}\\b`, "i").test(o.label) || o.value === String(n));
     return { page, opt };
   }
 
-  getGuestWifi(): Promise<GuestWifi> {
+  getGuestWifi(slot = 0): Promise<GuestWifi> {
+    const ap = this.guestAp(slot);
     return this.lock.run(async () => {
       const bands = await this.guestBands();
       let enabled = false, ssid: string | undefined, isolated: boolean | undefined, password: string | undefined;
       const onBands: Band[] = [];
       for (const b of bands) {
-        const g = await this.readGuestSlot(b.idx);
+        const g = await this.readGuestSlot(b.idx, ap);
         if (g.enabled) {
           enabled = true;
           onBands.push(b.band);
           ssid ??= g.ssid;
           isolated ??= g.isolated;
           if (password === undefined) {
-            const { page, opt } = await this.openGuestSecurity(b.idx);
+            const { page, opt } = await this.openGuestSecurity(b.idx, ap);
             try {
               if (opt) {
                 const s2 = await page.fill("formEncrypt", { wpaSSID: opt.value });
@@ -838,12 +843,12 @@ class RealtekBoaDriver implements RouterDriver {
         }
       }
       // Slots 3-4 of the router's 4 virtual networks per band are free (1-2 belong to the ISP).
-      return { enabled, ssid, password, isolated, bands: onBands, availableBands: bands.map((b) => b.band), networkSlots: 2 };
+      return { enabled, ssid, password, isolated, bands: onBands, availableBands: bands.map((b) => b.band), networkSlots: RealtekBoaDriver.GUEST_SLOTS, slot };
     });
   }
 
   setGuestWifi(cfg: GuestWifiConfig): Promise<void> {
-    const n = RealtekBoaDriver.GUEST_SLOT;
+    const n = this.guestAp(cfg.slot);
     if (cfg.enabled) {
       if (!cfg.ssid?.trim() || cfg.ssid.length > 32) return Promise.reject(new RouterError("Guest network name must be 1-32 characters.", "validation"));
       if (!cfg.password || cfg.password.length < 8 || cfg.password.length > 63) return Promise.reject(new RouterError("Guest password must be 8-63 characters.", "validation"));
@@ -856,7 +861,7 @@ class RealtekBoaDriver implements RouterDriver {
         await this.get(`/boaform/formWlanRedirect?redirect-url=${encodeURIComponent(PAGES.multiAp)}&wlan_idx=${b.idx}`);
         if (!wanted.includes(b)) {
           // Not wanted on this band (or guest Wi-Fi turned off): switch it off if it's on.
-          const cur = await this.readGuestSlot(b.idx);
+          const cur = await this.readGuestSlot(b.idx, n);
           if (!cur.enabled) continue;
           await this.get(`/boaform/formWlanRedirect?redirect-url=${encodeURIComponent(PAGES.multiAp)}&wlan_idx=${b.idx}`);
           await this.submit(PAGES.multiAp, { form: "MultipleAP", button: "Apply Changes", values: { [`wl_disable${n}`]: false } });
@@ -866,7 +871,7 @@ class RealtekBoaDriver implements RouterDriver {
         // Every "Apply" restarts this band's Wi-Fi (everyone on it drops for a
         // few seconds), so only apply what actually changes.
         const isolated = cfg.isolated !== false;
-        const cur = await this.readGuestSlot(b.idx);
+        const cur = await this.readGuestSlot(b.idx, n);
         if (!cur.enabled || cur.ssid !== cfg.ssid!.trim() || cur.isolated !== isolated) {
           const values: Record<string, string | boolean> = {
             [`wl_disable${n}`]: true,
@@ -879,7 +884,7 @@ class RealtekBoaDriver implements RouterDriver {
           await sleep(1500);
         }
         // Password lives on the security page, per access point.
-        const { page, opt } = await this.openGuestSecurity(b.idx);
+        const { page, opt } = await this.openGuestSecurity(b.idx, n);
         let cap: CapturedSubmit | null = null;
         try {
           if (!opt) throw new RouterError("The router didn't create the guest network. Try again in a minute.", "rejected");

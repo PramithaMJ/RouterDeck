@@ -14,6 +14,7 @@ interface DemoState {
   blocked: string[];
   mode?: AccessMode;
   guest?: GuestWifi;
+  guests?: (GuestWifi | undefined)[];
   allowed?: string[];
   sites: SiteBlocking;
   bootedAt: number;
@@ -188,17 +189,22 @@ class DemoDriver implements RouterDriver {
     this.save();
   }
 
-  async getGuestWifi(): Promise<GuestWifi> {
+  async getGuestWifi(slot = 0): Promise<GuestWifi> {
     await this.lag(400);
-    return { maxDevices: 8, ...(this.s.guest ?? { enabled: false, bands: [] }), availableBands: ["2.4GHz", "5GHz"], deviceLimit: { min: 1, max: 16 }, networkSlots: 2 };
+    const g = this.s.guests?.[slot] ?? (slot === 0 ? this.s.guest : undefined);
+    return { maxDevices: 8, ...(g ?? { enabled: false, bands: [] }), availableBands: ["2.4GHz", "5GHz"], deviceLimit: { min: 1, max: 16 }, networkSlots: 2, slot };
   }
 
   async setGuestWifi(cfg: GuestWifiConfig) {
     await this.lag(1400);
     if (cfg.enabled && (!cfg.password || cfg.password.length < 8)) throw new RouterError("Guest password must be at least 8 characters.", "validation");
-    this.s.guest = cfg.enabled
-      ? { enabled: true, ssid: cfg.ssid ?? this.s.guest?.ssid, password: cfg.password, isolated: cfg.isolated ?? true, bands: cfg.bands?.length ? cfg.bands : ["2.4GHz", "5GHz"], maxDevices: cfg.maxDevices ?? 8 }
-      : { ...(this.s.guest ?? { bands: [] }), enabled: false, bands: [] };
+    const slot = cfg.slot ?? 0;
+    const guests = [...(this.s.guests ?? [this.s.guest])];
+    const prev = guests[slot];
+    guests[slot] = cfg.enabled
+      ? { enabled: true, ssid: cfg.ssid ?? prev?.ssid, password: cfg.password, isolated: cfg.isolated ?? true, bands: cfg.bands?.length ? cfg.bands : ["2.4GHz", "5GHz"], maxDevices: cfg.maxDevices ?? 8 }
+      : { ...(prev ?? { bands: [] }), enabled: false, bands: [] };
+    this.s.guests = guests;
     this.save();
   }
 

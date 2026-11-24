@@ -123,8 +123,10 @@ export interface GuestWifi {
   maxDevices?: number;
   /** Range the router allows for maxDevices (shared with the main network on some routers). */
   deviceLimit?: { min: number; max: number };
-  /** How many extra (guest) Wi-Fi networks this router can broadcast. RouterDeck uses one. */
+  /** How many guest networks RouterDeck can run at the same time on this router. */
   networkSlots?: number;
+  /** Which guest network this is (0 = first). */
+  slot?: number;
 }
 
 export interface GuestWifiConfig {
@@ -136,6 +138,8 @@ export interface GuestWifiConfig {
   bands?: Band[];
   /** Device limit for the guest network (routers that support it). */
   maxDevices?: number;
+  /** Which guest network to change (0 = first). */
+  slot?: number;
 }
 
 export interface BlockedSite {
@@ -237,7 +241,8 @@ export interface RouterDriver {
    */
   getIpv6?(): Promise<{ enabled: boolean }>;
   setIpv6?(enabled: boolean): Promise<void>;
-  getGuestWifi?(): Promise<GuestWifi>;
+  /** slot: which guest network (0 = first). Routers with several report networkSlots. */
+  getGuestWifi?(slot?: number): Promise<GuestWifi>;
   setGuestWifi?(cfg: GuestWifiConfig): Promise<void>;
   getAdvancedMenu?(): Promise<AdvancedGroup[]>;
   openAdvanced?(id: string): Promise<LivePage>;

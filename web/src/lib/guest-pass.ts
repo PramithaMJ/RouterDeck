@@ -18,6 +18,8 @@ export interface GuestPass {
   bands?: Band[];
   /** Device limit set for this pass, if the router supports one. */
   maxDevices?: number;
+  /** Which of the router's guest networks it uses (0 = first). */
+  slot?: number;
   createdAt: number;
   /** null = no automatic expiry */
   expiresAt: number | null;
@@ -58,7 +60,10 @@ export const useGuestPasses = create<GuestPassState>((set, get) => ({
   },
   start(p) {
     const now = Date.now();
-    const passes = get().passes.map((x) => (x.router === p.router && !x.endedAt ? { ...x, endedAt: now, endReason: "replaced" as const } : x));
+    // Several passes can run at once, one per guest network; a new pass only
+    // replaces the one on the same network.
+    const slot = p.slot ?? 0;
+    const passes = get().passes.map((x) => (x.router === p.router && !x.endedAt && (x.slot ?? 0) === slot ? { ...x, endedAt: now, endReason: "replaced" as const } : x));
     const pass: GuestPass = { ...p, id: `${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`, createdAt: now };
     const next = [pass, ...passes];
     save(next);

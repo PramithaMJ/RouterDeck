@@ -1,18 +1,27 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, Copy, KeyRound, QrCode, RefreshCw, Share2, ShieldCheck, Sparkles, Ticket, Users, XCircle } from "lucide-react";
+import { Clock, Copy, KeyRound, Plus, QrCode, RefreshCw, Share2, ShieldCheck, Sparkles, Ticket, Users, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { bandsLabel, DURATIONS, formatRemaining, guestPassword, shareText, untilMidnight, useGuestPasses, type GuestPass } from "@/lib/guest-pass";
 import { useDevices, useRouterAction } from "@/lib/queries";
 import { useThisDevice } from "@/lib/this-device";
-import type { Band } from "@/lib/router/types";
+import type { Band, GuestWifi, RouterDriver } from "@/lib/router/types";
 import { useSession } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { Badge, Button, Card, CardHeader, cn, Dialog, Field, Input, Notice, Skeleton, Switch } from "./ui";
 import { WifiQrDialog } from "./wifi-qr";
 
 export const guestKey = ["guest-wifi"] as const;
+
+/** Every guest network the router lets RouterDeck use (slot 0, 1, …). */
+async function readAllGuests(driver: RouterDriver): Promise<GuestWifi[]> {
+  const first = await driver.getGuestWifi!(0);
+  const n = Math.max(1, Math.min(4, first.networkSlots ?? 1));
+  const out: GuestWifi[] = [{ ...first, slot: 0 }];
+  for (let i = 1; i < n; i++) out.push({ ...(await driver.getGuestWifi!(i)), slot: i });
+  return out;
+}
 
 function useNow(intervalMs = 15_000) {
   const [now, setNow] = useState(() => Date.now());
@@ -27,16 +36,17 @@ function useNow(intervalMs = 15_000) {
 export function GuestPassWatcher() {
   const driver = useSession((s) => s.driver);
   const host = useSession((s) => s.connection?.host) ?? "";
-  const active = useGuestPasses((s) => s.passes.find((p) => p.router === host && !p.endedAt));
+  const passes = useGuestPasses((s) => s.passes);
   const end = useGuestPasses((s) => s.end);
   const qc = useQueryClient();
   const now = useNow(20_000);
   const [busy, setBusy] = useState(false);
+  const active = passes.find((p) => p.router === host && !p.endedAt && p.expiresAt && p.expiresAt <= now);
   useEffect(() => {
     if (!driver?.setGuestWifi || !active?.expiresAt || busy || active.expiresAt > now) return;
     setBusy(true);
     driver
-      .setGuestWifi({ enabled: false })
+      .setGuestWifi({ enabled: false, slot: active.slot ?? 0 })
       .then(() => {
         end(active.id, "expired");
         qc.invalidateQueries({ queryKey: guestKey });
@@ -63,6 +73,7 @@ function CreateDialog({
   availableBands,
   canIsolate = true,
   deviceLimit,
+  slot = 0,
 }: {
   open: boolean;
   onClose: () => void;
@@ -70,6 +81,7 @@ function CreateDialog({
   availableBands: Band[];
   canIsolate?: boolean;
   deviceLimit?: { min: number; max: number };
+  slot?: number;
 }) {
   const host = useSession((s) => s.connection?.host) ?? "";
   const start = useGuestPasses((s) => s.start);
@@ -99,8 +111,8 @@ function CreateDialog({
 
   const create = useRouterAction<{ ssid: string; password: string; isolated: boolean; bands: Band[]; maxDevices?: number; expiresAt: number | null }>(
     async (d, v) => {
-      await d.setGuestWifi!({ enabled: true, ssid: v.ssid, password: v.password, isolated: v.isolated, bands: v.bands.length ? v.bands : undefined, maxDevices: v.maxDevices });
-      start({ router: host, ssid: v.ssid, password: v.password, bands: v.bands.length ? v.bands : undefined, maxDevices: v.maxDevices, expiresAt: v.expiresAt });
+      await d.setGuestWifi!({ enabled: true, slot, ssid: v.ssid, password: v.password, isolated: v.isolated, bands: v.bands.length ? v.bands : undefined, maxDevices: v.maxDevices });
+      start({ router: host, slot, ssid: v.ssid, password: v.password, bands: v.bands.length ? v.bands : undefined, maxDevices: v.maxDevices, expiresAt: v.expiresAt });
     },
     { invalidate: [guestKey], pending: "Creating the guest network…", success: "Guest pass ready. Share it below." },
   );
@@ -221,59 +233,163 @@ function CreateDialog({
   );
 }
 
-export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
-  const driver = useSession((s) => s.driver);
+/** One running pass: details, QR, share, extend, new password, revoke, and a check against the router. */
+function PassPanel({ pass, router, showWhen }: { pass: GuestPass; router?: GuestWifi; showWhen: boolean }) {
   const host = useSession((s) => s.connection?.host) ?? "";
   const transportKind = useSession((s) => s.transport?.kind);
-  const passes = useGuestPasses((s) => s.passes);
   const end = useGuestPasses((s) => s.end);
   const extend = useGuestPasses((s) => s.extend);
   const start = useGuestPasses((s) => s.start);
   const now = useNow(15_000);
-  const [creating, setCreating] = useState(false);
   const [qr, setQr] = useState(false);
+  const slot = pass.slot ?? 0;
 
-  const { data: guest, isLoading } = useQuery({
-    queryKey: guestKey,
-    queryFn: () => driver!.getGuestWifi!(),
-    enabled: !!driver?.getGuestWifi,
-    staleTime: 60_000,
-    refetchInterval: 60_000, // notice if the guest network changes on the router
-  });
-
-  const active = passes.find((p) => p.router === host && !p.endedAt);
   // Is the router actually broadcasting this pass? (It may have been changed or
   // turned off on the router itself, or a change didn't stick.)
-  const mismatch =
-    active && guest && !isLoading
-      ? !guest.enabled
-        ? "off"
-        : (guest.ssid && guest.ssid !== active.ssid) || (guest.password && guest.password !== active.password)
-          ? "different"
-          : null
-      : null;
-  const history = passes.filter((p) => p.router === host && p.endedAt).slice(0, 4);
+  const mismatch = router
+    ? !router.enabled
+      ? "off"
+      : (router.ssid && router.ssid !== pass.ssid) || (router.password && router.password !== pass.password)
+        ? "different"
+        : null
+    : null;
 
-  const revoke = useRouterAction<GuestPass | null>(
+  const revoke = useRouterAction<GuestPass>(
     async (d, p) => {
-      await d.setGuestWifi!({ enabled: false });
-      if (p) end(p.id, "revoked");
+      await d.setGuestWifi!({ enabled: false, slot: p.slot ?? 0 });
+      end(p.id, "revoked");
     },
-    { invalidate: [guestKey], pending: "Turning off the guest network…", success: "Revoked. Guests are disconnected." },
+    { invalidate: [guestKey], pending: "Turning off this guest network…", success: "Revoked. Guests on it are disconnected." },
   );
   const fix = useRouterAction<GuestPass>(
     async (d, p) => {
-      await d.setGuestWifi!({ enabled: true, ssid: p.ssid, password: p.password, bands: p.bands, maxDevices: p.maxDevices });
+      await d.setGuestWifi!({ enabled: true, slot: p.slot ?? 0, ssid: p.ssid, password: p.password, bands: p.bands, maxDevices: p.maxDevices });
     },
     { invalidate: [guestKey], pending: "Applying the pass on the router…", success: "Fixed. The guest network matches this pass again." },
   );
   const rotate = useRouterAction<GuestPass>(
     async (d, p) => {
       const password = guestPassword();
-      await d.setGuestWifi!({ enabled: true, ssid: p.ssid, password, bands: p.bands, maxDevices: p.maxDevices });
-      start({ router: host, ssid: p.ssid, password, bands: p.bands, maxDevices: p.maxDevices, expiresAt: p.expiresAt });
+      await d.setGuestWifi!({ enabled: true, slot: p.slot ?? 0, ssid: p.ssid, password, bands: p.bands, maxDevices: p.maxDevices });
+      start({ router: host, slot: p.slot ?? 0, ssid: p.ssid, password, bands: p.bands, maxDevices: p.maxDevices, expiresAt: p.expiresAt });
     },
     { invalidate: [guestKey], pending: "Changing the guest password…", success: "New guest password set. Old one no longer works." },
+  );
+
+  async function share(p: GuestPass) {
+    const text = shareText(p);
+    try {
+      if (navigator.share) await navigator.share({ title: "Wi-Fi", text });
+      else {
+        await navigator.clipboard.writeText(text);
+        toast.success("Copied. Paste it into WhatsApp, SMS or email.");
+      }
+    } catch {}
+  }
+
+  const remaining = pass.expiresAt ? pass.expiresAt - now : null;
+
+  return (
+    <div className="space-y-4">
+      {mismatch && (
+        <Notice tone="amber" icon={<Users />}>
+          {mismatch === "off" ? "This guest network is turned off on the router, so the pass won't work right now." : "The router's guest network has a different name or password than this pass, so its QR code won't work."}
+          <div className="mt-2.5">
+            <Button size="sm" onClick={() => fix.mutate(pass)} loading={fix.isPending}>
+              Fix it
+            </Button>
+          </div>
+        </Notice>
+      )}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg bg-[var(--surface-2)] p-3.5">
+          <p className="label-caps">Network{showWhen ? ` ${slot + 1}` : ""}</p>
+          <p className="mt-1 truncate font-medium">{pass.ssid}</p>
+          <p className="mt-0.5 text-[12px] text-muted">
+            {bandsLabel(pass.bands, router?.availableBands)}
+            {(pass.maxDevices ?? router?.maxDevices) ? ` · up to ${pass.maxDevices ?? router?.maxDevices} devices` : ""}
+          </p>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-2)] p-3.5">
+          <p className="label-caps">Password</p>
+          <p className="mt-1 flex items-center gap-1.5 font-mono font-medium">
+            {pass.password}
+            <button className="text-muted hover:text-[var(--text)]" onClick={() => navigator.clipboard.writeText(pass.password).then(() => toast.success("Password copied"))} aria-label="Copy password">
+              <Copy className="size-3.5" />
+            </button>
+          </p>
+        </div>
+        <div className="rounded-lg bg-[var(--surface-2)] p-3.5">
+          <p className="label-caps">Expires</p>
+          <p className={cn("mt-1 flex items-center gap-1.5 font-medium", remaining !== null && remaining < 15 * 60_000 && "text-amber-600 dark:text-amber-400")}>
+            <Clock className="size-3.5" /> {remaining === null ? "When you revoke it" : formatRemaining(remaining)}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setQr(true)}>
+          <QrCode className="size-4" /> Show QR
+        </Button>
+        <Button variant="secondary" onClick={() => share(pass)}>
+          <Share2 className="size-4" /> Share
+        </Button>
+        {pass.expiresAt && (
+          <>
+            <Button variant="secondary" onClick={() => extend(pass.id, Math.max(pass.expiresAt!, Date.now()) + 3_600_000)}>
+              +1 hour
+            </Button>
+            <Button variant="secondary" onClick={() => extend(pass.id, Math.max(pass.expiresAt!, Date.now()) + 86_400_000)}>
+              +1 day
+            </Button>
+          </>
+        )}
+        <Button variant="ghost" onClick={() => rotate.mutate(pass)} loading={rotate.isPending}>
+          <RefreshCw className="size-4" /> New password
+        </Button>
+        <Button variant="soft-danger" onClick={() => revoke.mutate(pass)} loading={revoke.isPending}>
+          <XCircle className="size-4" /> Revoke now
+        </Button>
+      </div>
+      {transportKind !== "desktop" && pass.expiresAt && !showWhen && (
+        <p className="text-[12.5px] text-muted">
+          RouterDeck turns the guest network off when time is up while it&apos;s open. Close it earlier and it happens next time you open RouterDeck, or use the RouterDeck desktop app, which does it on time in the background.
+        </p>
+      )}
+      <WifiQrDialog network={{ id: `guest-${slot}`, band: pass.bands?.length === 1 ? pass.bands[0] : "2.4GHz", enabled: true, ssid: pass.ssid, password: pass.password, security: "WPA2-Personal", editable: { ssid: false, password: false, enabled: false } }} open={qr} onClose={() => setQr(false)} />
+    </div>
+  );
+}
+
+export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
+  const driver = useSession((s) => s.driver);
+  const host = useSession((s) => s.connection?.host) ?? "";
+  const transportKind = useSession((s) => s.transport?.kind);
+  const passes = useGuestPasses((s) => s.passes);
+  const [creating, setCreating] = useState<number | null>(null);
+
+  const { data: guests, isLoading } = useQuery({
+    queryKey: guestKey,
+    queryFn: () => readAllGuests(driver!),
+    enabled: !!driver?.getGuestWifi,
+    staleTime: 60_000,
+    refetchInterval: 60_000, // notice if a guest network changes on the router
+  });
+  const guest = guests?.[0];
+  const slots = guests?.length ?? 1;
+
+  const actives = passes.filter((p) => p.router === host && !p.endedAt).sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0));
+  const passOn = (slot: number) => actives.find((p) => (p.slot ?? 0) === slot);
+  // Guest networks that are on but weren't created by RouterDeck.
+  const foreign = (guests ?? []).filter((g) => g.enabled && !passOn(g.slot ?? 0));
+  // Where the next pass goes: a network that's off and has no pass, else one RouterDeck doesn't manage.
+  const freeSlot = (guests ?? [{ slot: 0, enabled: false } as GuestWifi]).find((g) => !g.enabled && !passOn(g.slot ?? 0))?.slot ?? foreign[0]?.slot;
+  const history = passes.filter((p) => p.router === host && p.endedAt).slice(0, 4);
+
+  const turnOff = useRouterAction<number>(
+    async (d, slot) => {
+      await d.setGuestWifi!({ enabled: false, slot });
+    },
+    { invalidate: [guestKey], pending: "Turning off the guest network…", success: "Turned off." },
   );
 
   // iPhones remember the password of every network *name* they've seen and
@@ -290,19 +406,7 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
   }, [mainSsid, passes, host]);
 
   if (!driver?.getGuestWifi) return null;
-
-  async function share(p: GuestPass) {
-    const text = shareText(p);
-    try {
-      if (navigator.share) await navigator.share({ title: "Wi-Fi", text });
-      else {
-        await navigator.clipboard.writeText(text);
-        toast.success("Copied. Paste it into WhatsApp, SMS or email.");
-      }
-    } catch {}
-  }
-
-  const remaining = active?.expiresAt ? active.expiresAt - now : null;
+  const several = slots > 1;
 
   return (
     <Card className="mb-5 overflow-hidden">
@@ -316,120 +420,80 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
         description={
           <>
             Share Wi-Fi with visitors using a temporary password you can revoke any time.
-            {guest?.networkSlots ? (
+            {guest ? (
               <span className="mt-1 block text-[12px]">
-                This router can run {guest.networkSlots} guest {guest.networkSlots === 1 ? "network" : "networks"}
-                {guest.availableBands && guest.availableBands.length > 1 ? " per band" : ""}; RouterDeck uses one at a time
-                {guest.deviceLimit ? `, for up to ${guest.deviceLimit.max} devices` : ""}.
+                {several ? `Up to ${slots} passes at the same time on this router, each with its own network and password` : "One pass at a time on this router"}
+                {guest.deviceLimit ? `; up to ${guest.deviceLimit.max} devices per pass` : ""}.
               </span>
             ) : null}
           </>
         }
-        action={active ? <Badge tone="green">Active</Badge> : guest?.enabled ? <Badge tone="amber">Guest Wi-Fi on</Badge> : undefined}
+        action={actives.length ? <Badge tone="green">{actives.length > 1 ? `${actives.length} active` : "Active"}</Badge> : foreign.length ? <Badge tone="amber">Guest Wi-Fi on</Badge> : undefined}
       />
 
       <div className="p-5 sm:p-6">
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
-        ) : active ? (
-          <div className="space-y-4">
-            {mismatch && (
-              <Notice tone="amber" icon={<Users />}>
-                {mismatch === "off" ? "The guest network is turned off on the router, so this pass won't work right now." : "The router's guest network has a different name or password than this pass, so this QR code won't work."}
-                <div className="mt-2.5">
-                  <Button size="sm" onClick={() => fix.mutate(active)} loading={fix.isPending}>
-                    Fix it
+        ) : (
+          <div className="space-y-5">
+            {actives.map((p, i) => (
+              <div key={p.id} className={cn(i > 0 && "border-t border-subtle pt-5")}>
+                <PassPanel pass={p} router={guests?.find((g) => (g.slot ?? 0) === (p.slot ?? 0))} showWhen={several && actives.length > 1} />
+              </div>
+            ))}
+
+            {foreign.map((g) => (
+              <Notice key={`f-${g.slot}`} tone="amber" icon={<Users />}>
+                A guest network <b>{g.ssid}</b> is on, but it wasn&apos;t created here. Turn it off, or create a pass on it to take control.
+                <div className="mt-3 flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => turnOff.mutate(g.slot ?? 0)} loading={turnOff.isPending && turnOff.variables === (g.slot ?? 0)}>
+                    Turn off
+                  </Button>
+                  <Button size="sm" onClick={() => setCreating(g.slot ?? 0)}>
+                    New pass
                   </Button>
                 </div>
               </Notice>
-            )}
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg bg-[var(--surface-2)] p-3.5">
-                <p className="label-caps">Network</p>
-                <p className="mt-1 truncate font-medium">{active.ssid}</p>
-                <p className="mt-0.5 text-[12px] text-muted">
-                  {bandsLabel(active.bands, guest?.availableBands)}
-                  {(active.maxDevices ?? guest?.maxDevices) ? ` · up to ${active.maxDevices ?? guest?.maxDevices} devices` : ""}
-                </p>
+            ))}
+
+            {actives.length === 0 && foreign.length === 0 ? (
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <ul className="flex-1 space-y-1.5 text-[13.5px] text-muted">
+                  <li className="flex items-center gap-2">
+                    <KeyRound className="size-4" /> Your main Wi-Fi password stays private
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Clock className="size-4" /> Expires automatically after the time you choose
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <ShieldCheck className="size-4" /> Revoke any time to disconnect everyone on it
+                  </li>
+                </ul>
+                <Button size="lg" onClick={() => setCreating(freeSlot ?? 0)}>
+                  <Ticket className="size-4" /> Create a guest pass
+                </Button>
               </div>
-              <div className="rounded-lg bg-[var(--surface-2)] p-3.5">
-                <p className="label-caps">Password</p>
-                <p className="mt-1 flex items-center gap-1.5 font-mono font-medium">
-                  {active.password}
-                  <button className="text-muted hover:text-[var(--text)]" onClick={() => navigator.clipboard.writeText(active.password).then(() => toast.success("Password copied"))} aria-label="Copy password">
-                    <Copy className="size-3.5" />
-                  </button>
+            ) : actives.length > 0 && freeSlot !== undefined && !passOn(freeSlot) ? (
+              <div className="flex flex-col gap-3 rounded-xl border border-dashed border-subtle p-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[13px] text-muted">
+                  {actives.length} of {slots} guest networks in use. Give another visitor their own network and password.
                 </p>
+                <Button variant="secondary" onClick={() => setCreating(freeSlot)}>
+                  <Plus className="size-4" /> Create another guest pass
+                </Button>
               </div>
-              <div className="rounded-lg bg-[var(--surface-2)] p-3.5">
-                <p className="label-caps">Expires</p>
-                <p className={cn("mt-1 flex items-center gap-1.5 font-medium", remaining !== null && remaining < 15 * 60_000 && "text-amber-600 dark:text-amber-400")}>
-                  <Clock className="size-3.5" /> {remaining === null ? "When you revoke it" : formatRemaining(remaining)}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => setQr(true)}>
-                <QrCode className="size-4" /> Show QR
-              </Button>
-              <Button variant="secondary" onClick={() => share(active)}>
-                <Share2 className="size-4" /> Share
-              </Button>
-              {active.expiresAt && (
-                <>
-                  <Button variant="secondary" onClick={() => extend(active.id, Math.max(active.expiresAt!, Date.now()) + 3_600_000)}>
-                    +1 hour
-                  </Button>
-                  <Button variant="secondary" onClick={() => extend(active.id, Math.max(active.expiresAt!, Date.now()) + 86_400_000)}>
-                    +1 day
-                  </Button>
-                </>
-              )}
-              <Button variant="ghost" onClick={() => rotate.mutate(active)} loading={rotate.isPending}>
-                <RefreshCw className="size-4" /> New password
-              </Button>
-              <Button variant="soft-danger" onClick={() => revoke.mutate(active)} loading={revoke.isPending}>
-                <XCircle className="size-4" /> Revoke now
-              </Button>
-            </div>
-            <p className="text-[12.5px] leading-relaxed text-muted">
-              <b className="font-medium text-[var(--text)]">iPhone can&apos;t join?</b> It may remember an older guest password. On the iPhone: Settings → Wi-Fi → ⓘ next to <b>{active.ssid}</b> → Forget This Network, then scan the QR again. Revoking or a new password restarts the guest Wi-Fi for a few seconds.
-            </p>
-            {transportKind !== "desktop" && active.expiresAt && (
-              <p className="text-[12.5px] text-muted">
-                RouterDeck turns the guest network off when time is up while it&apos;s open. Close it earlier and it happens next time you open RouterDeck, or use the RouterDeck desktop app, which does it on time in the background.
+            ) : actives.length > 0 && several ? (
+              <p className="text-[12.5px] text-muted">All {slots} guest networks are in use. Revoke one to create another.</p>
+            ) : null}
+
+            {actives.length > 0 && (
+              <p className="text-[12.5px] leading-relaxed text-muted">
+                <b className="font-medium text-[var(--text)]">iPhone can&apos;t join?</b> It may remember an older guest password for that network name. On the iPhone: Settings → Wi-Fi → ⓘ → Forget This Network, then scan the QR again. Creating, changing or revoking a pass restarts that guest Wi-Fi for a few seconds.
+                {transportKind !== "desktop" && actives.some((p) => p.expiresAt) && actives.length > 1
+                  ? " Passes end on time while RouterDeck is open (or always, with the desktop app running)."
+                  : ""}
               </p>
             )}
-            <WifiQrDialog network={{ id: "guest", band: active.bands?.length === 1 ? active.bands[0] : "2.4GHz", enabled: true, ssid: active.ssid, password: active.password, security: "WPA2-Personal", editable: { ssid: false, password: false, enabled: false } }} open={qr} onClose={() => setQr(false)} />
-          </div>
-        ) : guest?.enabled ? (
-          <Notice tone="amber" icon={<Users />}>
-            A guest network <b>{guest.ssid}</b> is on, but it wasn&apos;t created here. Turn it off, or create a new pass to take control of it.
-            <div className="mt-3 flex gap-2">
-              <Button size="sm" variant="secondary" onClick={() => revoke.mutate(null)} loading={revoke.isPending}>
-                Turn off
-              </Button>
-              <Button size="sm" onClick={() => setCreating(true)}>
-                New pass
-              </Button>
-            </div>
-          </Notice>
-        ) : (
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <ul className="flex-1 space-y-1.5 text-[13.5px] text-muted">
-              <li className="flex items-center gap-2">
-                <KeyRound className="size-4" /> Your main Wi-Fi password stays private
-              </li>
-              <li className="flex items-center gap-2">
-                <Clock className="size-4" /> Expires automatically after the time you choose
-              </li>
-              <li className="flex items-center gap-2">
-                <ShieldCheck className="size-4" /> Revoke any time to disconnect everyone on it
-              </li>
-            </ul>
-            <Button size="lg" onClick={() => setCreating(true)}>
-              <Ticket className="size-4" /> Create a guest pass
-            </Button>
           </div>
         )}
 
@@ -452,7 +516,15 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
         )}
       </div>
 
-      <CreateDialog open={creating} onClose={() => setCreating(false)} defaultName={defaultName} availableBands={guest?.availableBands ?? []} canIsolate={guest?.canIsolate !== false} deviceLimit={guest?.deviceLimit} />
+      <CreateDialog
+        open={creating !== null}
+        onClose={() => setCreating(null)}
+        slot={creating ?? 0}
+        defaultName={defaultName}
+        availableBands={(guests?.find((g) => (g.slot ?? 0) === (creating ?? 0)) ?? guest)?.availableBands ?? []}
+        canIsolate={guest?.canIsolate !== false}
+        deviceLimit={(guests?.find((g) => (g.slot ?? 0) === (creating ?? 0)) ?? guest)?.deviceLimit}
+      />
     </Card>
   );
 }
