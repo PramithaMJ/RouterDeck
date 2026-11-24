@@ -146,18 +146,17 @@ Code signing is optional and switches on when these repository secrets exist:
 `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` (macOS, also enables
 in-place updates on Mac) and `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` (Windows).
 
-## Deploy (free, Cloudflare Pages)
+## Deploy (free, Cloudflare Workers)
 
-Connected to this repository with Git integration:
+[deploy.yml](.github/workflows/deploy.yml) builds `web/` and runs `wrangler deploy` (static assets from `web/out`,
+config in [web/wrangler.jsonc](web/wrangler.jsonc)) on every push to `main`. It needs two repository secrets:
 
-| Setting | Value |
+| Secret | Where to get it |
 | --- | --- |
-| Root directory | `web` |
-| Build command | `npm run build` |
-| Output directory | `out` |
-| Node version | `22` (from `web/.node-version`) |
-| Custom domain | `router.pramitha.lk` |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare → My Profile → API Tokens → Create Token → template **Edit Cloudflare Workers** |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare → Workers & Pages → *Account ID* in the right sidebar |
 
+The custom domain `router.pramitha.lk` is attached to the `routerdeck` Worker in Cloudflare.
 Every push to `main` deploys automatically. Using your own domain? Add it to
 `extension/manifest.json` (`content_scripts.matches`) and start the connector with `--origin https://your-domain`.
 
