@@ -201,9 +201,20 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
     queryFn: () => driver!.getGuestWifi!(),
     enabled: !!driver?.getGuestWifi,
     staleTime: 60_000,
+    refetchInterval: 60_000, // notice if the guest network changes on the router
   });
 
   const active = passes.find((p) => p.router === host && !p.endedAt);
+  // Is the router actually broadcasting this pass? (It may have been changed or
+  // turned off on the router itself, or a change didn't stick.)
+  const mismatch =
+    active && guest && !isLoading
+      ? !guest.enabled
+        ? "off"
+        : (guest.ssid && guest.ssid !== active.ssid) || (guest.password && guest.password !== active.password)
+          ? "different"
+          : null
+      : null;
   const history = passes.filter((p) => p.router === host && p.endedAt).slice(0, 4);
 
   const revoke = useRouterAction<GuestPass | null>(
@@ -212,6 +223,12 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
       if (p) end(p.id, "revoked");
     },
     { invalidate: [guestKey], pending: "Turning off the guest network…", success: "Revoked. Guests are disconnected." },
+  );
+  const fix = useRouterAction<GuestPass>(
+    async (d, p) => {
+      await d.setGuestWifi!({ enabled: true, ssid: p.ssid, password: p.password, bands: p.bands });
+    },
+    { invalidate: [guestKey], pending: "Applying the pass on the router…", success: "Fixed. The guest network matches this pass again." },
   );
   const rotate = useRouterAction<GuestPass>(
     async (d, p) => {
@@ -222,10 +239,18 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
     { invalidate: [guestKey], pending: "Changing the guest password…", success: "New guest password set. Old one no longer works." },
   );
 
+  // iPhones remember the password of every network *name* they've seen and
+  // won't take a new one for the same name ("Unable to join"). So a new pass
+  // gets a name not used by an earlier pass: -Guest, -Guest2, -Guest3, …
   const defaultName = useMemo(() => {
     const base = (mainSsid || "Home").replace(/[-_ ]?(2\.4G|5G|2G)(?![a-z0-9.]).*$/i, "").slice(0, 24);
+    const used = new Set(passes.filter((p) => p.router === host).map((p) => p.ssid));
+    for (let n = 1; n < 100; n++) {
+      const name = `${base}-Guest${n === 1 ? "" : n}`;
+      if (!used.has(name)) return name;
+    }
     return `${base}-Guest`;
-  }, [mainSsid]);
+  }, [mainSsid, passes, host]);
 
   if (!driver?.getGuestWifi) return null;
 
@@ -260,6 +285,16 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
           <Skeleton className="h-16 w-full" />
         ) : active ? (
           <div className="space-y-4">
+            {mismatch && (
+              <Notice tone="amber" icon={<Users />}>
+                {mismatch === "off" ? "The guest network is turned off on the router, so this pass won't work right now." : "The router's guest network has a different name or password than this pass, so this QR code won't work."}
+                <div className="mt-2.5">
+                  <Button size="sm" onClick={() => fix.mutate(active)} loading={fix.isPending}>
+                    Fix it
+                  </Button>
+                </div>
+              </Notice>
+            )}
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg bg-[var(--surface-2)] p-3.5">
                 <p className="label-caps">Network</p>
