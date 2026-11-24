@@ -5,6 +5,8 @@ import type {
   AccessMode,
   Device,
   DriverContext,
+  GuestWifi,
+  GuestWifiConfig,
   DriverFactory,
   Overview,
   RouterDriver,
@@ -218,11 +220,13 @@ class ZteGoformDriver implements RouterDriver {
   getOverview(): Promise<Overview> {
     return this.lock.run(async () => {
       const r = await this.readAuthed([
-        "network_provider", "network_type", "signalbar", "rssi", "lte_rsrp", "lte_rsrq", "lte_snr", "lte_band",
+        "network_provider", "network_type", "signalbar", "rssi", "lte_rsrp", "lte_rsrq", "lte_snr", "lte_sinr", "lte_band",
         "ppp_status", "wan_ipaddr", "realtime_time", "prefer_dns_auto", "standby_dns_auto",
-        "cr_version", "wa_inner_version", "hardware_version", "real_device_version",
+        "tz_real_version", "cr_version", "wa_inner_version", "hardware_version", "real_device_version",
         "lan_ipaddr", "lan_netmask", "mac_address", "dhcpEnabled", "sta_count", "lan_station_count",
       ]);
+      const lan = await this.read(["lan_station_list"]).catch(() => ({}) as Json);
+      const cabled = Array.isArray(lan.lan_station_list) ? lan.lan_station_list.length : 0;
       const provider = str(r.network_provider);
       const online = str(r.ppp_status) === "ppp_connected";
       const type = networkType(str(r.network_type));
@@ -233,10 +237,10 @@ class ZteGoformDriver implements RouterDriver {
           model,
           vendor: "ZTE-style 4G",
           isp: detectIsp({ plmn: provider }),
-          firmware: str(r.wa_inner_version) || str(r.cr_version) || undefined,
+          firmware: str(r.tz_real_version) || str(r.wa_inner_version) || str(r.cr_version) || undefined,
           hardware: str(r.hardware_version) || undefined,
         },
-        dns: [str(r.prefer_dns_auto), str(r.standby_dns_auto)].filter(Boolean),
+        dns: [str(r.prefer_dns_auto), str(r.standby_dns_auto)].filter((d) => d && d !== "0.0.0.0"),
         lan: {
           ip: str(r.lan_ipaddr) || new URL(this.ctx.baseUrl).hostname,
           netmask: str(r.lan_netmask) || undefined,
@@ -251,11 +255,11 @@ class ZteGoformDriver implements RouterDriver {
           bars: num(r.signalbar),
           rsrp: num(r.lte_rsrp),
           rsrq: num(r.lte_rsrq),
-          sinr: num(r.lte_snr),
+          sinr: num(r.lte_sinr) ?? num(r.lte_snr),
           rssi: num(r.rssi),
           band: str(r.lte_band) ? `B${str(r.lte_band).replace(/^B/i, "")}` : undefined,
         },
-        deviceCount: (num(r.sta_count) ?? 0) + (num(r.lan_station_count) ?? 0),
+        deviceCount: (num(r.sta_count) ?? 0) + cabled,
         fetchedAt: Date.now(),
       } satisfies Overview;
     });
@@ -284,7 +288,9 @@ class ZteGoformDriver implements RouterDriver {
     } else if (unique.length) {
       await this.action("WIFI_MAC_FILTER", { ACL_mode: "2", wifi_mac_black_list: unique.map(fmtMac).join(";") });
     } else {
-      await this.action("WIFI_MAC_FILTER", { ACL_mode: "0" });
+      // An empty block list. (Mode "0" = off would leave the old entries stored,
+      // because the router ignores the list while the filter is off.)
+      await this.action("WIFI_MAC_FILTER", { ACL_mode: "2", wifi_mac_black_list: "" });
     }
   }
 
@@ -430,6 +436,82 @@ class ZteGoformDriver implements RouterDriver {
         }
       }
       throw new RouterError("The router didn't apply the new Wi-Fi settings. Try again, or change them on the router's own page.", "rejected");
+    });
+  }
+
+  // ---------------------------------------------------------------- guest Wi-Fi (second network, "SSID2")
+
+  private async readGuest() {
+    const encode = await this.encodes();
+    const r = await this.readAuthed(["m_ssid_enable", "tz_ssid2_enable", "m_SSID", "m_AuthMode", "m_NoForwarding", "m_MAX_Access_num", encode ? "m_WPAPSK1_encode" : "m_WPAPSK1"]);
+    const raw = str(encode ? r.m_WPAPSK1_encode : r.m_WPAPSK1);
+    return {
+      r,
+      // tz_ssid2_enable is what the router actually broadcasts; m_ssid_enable is a stored flag.
+      enabled: str(r.tz_ssid2_enable) === "1",
+      ssid: str(r.m_SSID),
+      password: raw ? (encode ? unb64(raw) : raw) : "",
+      isolated: str(r.m_NoForwarding) === "1",
+    };
+  }
+
+  getGuestWifi(): Promise<GuestWifi> {
+    return this.lock.run(async () => {
+      const g = await this.readGuest();
+      return {
+        enabled: g.enabled,
+        ssid: g.ssid || undefined,
+        password: g.password || undefined,
+        isolated: g.isolated,
+        bands: g.enabled ? ["2.4GHz"] : [],
+        availableBands: ["2.4GHz"],
+      };
+    });
+  }
+
+  setGuestWifi(cfg: GuestWifiConfig): Promise<void> {
+    if (cfg.enabled) {
+      if (!cfg.ssid?.trim() || cfg.ssid.length > 32) return Promise.reject(new RouterError("Guest network name must be 1-32 characters.", "validation"));
+      if (!cfg.password || cfg.password.length < 8 || cfg.password.length > 63) return Promise.reject(new RouterError("Guest password must be 8-63 characters.", "validation"));
+    }
+    const wait = async (ok: (g: Awaited<ReturnType<ZteGoformDriver["readGuest"]>>) => boolean) => {
+      // Applying restarts the Wi-Fi radio; poll until the router reports the new state.
+      for (let i = 0; i < 12; i++) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const g = await this.readGuest().catch(() => null);
+        if (g && ok(g)) return true;
+      }
+      return false;
+    };
+    return this.lock.run(async () => {
+      const cur = await this.readGuest();
+      if (!cfg.enabled) {
+        if (!cur.enabled) return;
+        // Same request as the router's own page: wifiEnabled with wifiOrder=1
+        // switches the second network (SSID2), not the main Wi-Fi.
+        await this.action("SET_WIFI_INFO2", { wifiEnabled: "0", wifiOrder: "1" });
+        if (!(await wait((g) => !g.enabled))) throw new RouterError("The router didn't turn the guest network off. Try again.", "rejected");
+        return;
+      }
+      const ssid = cfg.ssid!.trim();
+      const isolated = cfg.isolated !== false;
+      if (cur.ssid !== ssid || cur.password !== cfg.password || cur.isolated !== isolated || str(cur.r.m_AuthMode) !== "WPA2PSK") {
+        const station = num(cur.r.m_MAX_Access_num);
+        await this.action("SET_WIFI_SSID2_SETTINGS", {
+          m_SSID: ssid,
+          m_HideSSID: "0", // broadcast the name
+          m_MAX_Access_num: station && station > 0 ? String(station) : "8",
+          m_AuthMode: "WPA2PSK", // WPA2-AES: works on every phone, including iPhones
+          cipher: "1",
+          m_EncrypType: "1",
+          m_NoForwarding: isolated ? "1" : "0",
+          m_show_qrcode_flag: "0",
+          m_WPAPSK1: await this.enc(cfg.password!),
+        });
+      }
+      if (!cur.enabled) await this.action("SET_WIFI_INFO2", { m_ssid_enable: "1", wifiEnabled: "1", wifiOrder: "1" });
+      if (!(await wait((g) => g.enabled && g.ssid === ssid && g.password === cfg.password)))
+        throw new RouterError("The router didn't apply the guest network. Try again in a minute.", "rejected");
     });
   }
 
