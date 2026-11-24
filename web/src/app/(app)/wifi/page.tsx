@@ -66,7 +66,7 @@ function NetworkCard({ n, others, onShare }: { n: WifiNetwork; others: WifiNetwo
   return (
     <Card className={cn("overflow-hidden", !n.enabled && "opacity-95")}>
       <div className="flex items-center gap-3 border-b border-subtle px-5 py-4 sm:px-6">
-        <div className={cn("flex size-11 items-center justify-center rounded-2xl", n.enabled ? "bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-200" : "bg-[var(--surface-2)] text-muted")}>
+        <div className={cn("flex size-11 items-center justify-center rounded-2xl", n.enabled ? "bg-[var(--surface-2)] text-[var(--text)]" : "bg-[var(--surface-2)] text-muted")}>
           {n.enabled ? <Wifi className="size-5" /> : <WifiOff className="size-5" />}
         </div>
         <div className="min-w-0 flex-1">

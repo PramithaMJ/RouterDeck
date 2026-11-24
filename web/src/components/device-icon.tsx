@@ -20,8 +20,8 @@ export function DeviceIcon({ kind, blocked, className }: { kind: DeviceKind; blo
   return (
     <div
       className={cn(
-        "flex size-11 shrink-0 items-center justify-center rounded-2xl",
-        blocked ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300" : "bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-200",
+        "flex size-11 shrink-0 items-center justify-center rounded-xl",
+        blocked ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300" : "bg-[var(--surface-2)] text-[var(--text)]",
         className,
       )}
     >

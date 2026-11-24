@@ -39,11 +39,11 @@ function MethodRow({
       onClick={onSelect}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onSelect()}
       className={cn(
-        "flex cursor-pointer items-center gap-3 rounded-2xl border p-3.5 transition",
-        selected ? "border-brand-400 bg-brand-50/60 ring-4 ring-brand-500/10 dark:border-brand-400/60 dark:bg-brand-500/10" : "border-subtle hover:bg-[var(--surface-2)]",
+        "flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition",
+        selected ? "border-[var(--text)] bg-[var(--surface)] ring-1 ring-[var(--text)]" : "border-subtle hover:bg-[var(--surface-2)]",
       )}
     >
-      <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", selected ? "bg-brand-600 text-white" : "bg-[var(--surface-2)] text-muted")}>{icon}</div>
+      <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg", selected ? "bg-ink" : "bg-[var(--surface-2)] text-muted")}>{icon}</div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[14.5px] font-medium">{title}</span>
@@ -59,7 +59,7 @@ function MethodRow({
 function FoundRouter({ r, method }: { r: Identified; method: Method }) {
   const isp = ispById(r.isp);
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 dark:border-emerald-500/25 dark:bg-emerald-500/10">
+    <div className="flex items-center gap-3 rounded-xl border border-subtle bg-[var(--surface-2)] p-3.5">
       {isp ? (
         <IspLogo isp={isp} size="lg" />
       ) : (
@@ -204,8 +204,9 @@ export function ConnectCard() {
     <Card className="overflow-hidden shadow-pop">
       {stage === "choose" ? (
         <div className="p-5 sm:p-7">
-          <h2 className="text-lg font-semibold tracking-tight">Connect to your router</h2>
-          <p className="mt-1 text-sm text-muted">Works with SLT-Mobitel fiber, Dialog &amp; Mobitel 4G routers, Starlink and more.</p>
+          <p className="label-caps">Step 1 of 2</p>
+          <h2 className="mt-1.5 text-[19px] font-semibold tracking-[-0.02em]">Connect to your router</h2>
+          <p className="mt-1 text-[13.5px] text-muted">Pick how this page reaches the router in your home. You only set this up once.</p>
 
           <div className="mt-5 space-y-2.5" role="radiogroup" aria-label="Connection method">
             <MethodRow
@@ -247,7 +248,7 @@ export function ConnectCard() {
                 <div className="flex items-center gap-3 rounded-2xl bg-[var(--surface-2)] p-4" aria-live="polite">
                   <span className="relative flex size-10 items-center justify-center">
                     <span className="absolute inset-0 animate-ping rounded-full bg-brand-400/30" />
-                    <span className="relative flex size-10 items-center justify-center rounded-full bg-brand-600 text-white">
+                    <span className="relative flex size-10 items-center justify-center rounded-full bg-ink">
                       <Radar className="size-5" />
                     </span>
                   </span>
@@ -293,7 +294,7 @@ export function ConnectCard() {
                       <button
                         key={p}
                         onClick={() => setHost(p)}
-                        className={cn("rounded-lg border px-2 py-1 font-mono text-[11.5px] transition", host === p ? "border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-400/40 dark:bg-brand-500/15 dark:text-brand-200" : "border-subtle text-muted hover:text-[var(--text)]")}
+                        className={cn("rounded-md border px-2 py-1 font-mono text-[11.5px] transition", host === p ? "border-[var(--text)] text-[var(--text)]" : "border-subtle text-muted hover:text-[var(--text)]")}
                       >
                         {p}
                       </button>
@@ -332,7 +333,8 @@ export function ConnectCard() {
           </button>
           {found && method && <FoundRouter r={found} method={method} />}
 
-          <h2 className="mt-6 text-lg font-semibold tracking-tight">Sign in to your router</h2>
+          <p className="label-caps mt-6">Step 2 of 2</p>
+          <h2 className="mt-1.5 text-[19px] font-semibold tracking-[-0.02em]">Sign in to your router</h2>
           <p className="mt-1 text-sm text-muted">
             {method === "demo" ? <>Demo login is pre-filled (admin / admin).</> : <>Use the same username and password as the router&apos;s own page. Often printed on the router label.</>}
           </p>

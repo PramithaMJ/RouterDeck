@@ -69,7 +69,7 @@ export function SpeedGauge({
   const cx = 160, cy = 160, r = 128;
   const angle = START + SWEEP * Math.max(0, Math.min(1, frac));
   const colors = {
-    brand: ["#8b8af9", "#4f46e5"],
+    brand: ["#f7a072", "#e8551f"],
     emerald: ["#34d399", "#059669"],
     amber: ["#fbbf24", "#d97706"],
   }[tone];
@@ -129,7 +129,7 @@ export function SpeedChart({ samples, tone }: { samples: number[]; tone: "brand"
   const pts = samples.map((v, i) => [samples.length <= 1 ? 0 : (i / (samples.length - 1)) * w, h - (v / max) * (h - 8) - 4]);
   const line = pts.map((p, i) => `${i ? "L" : "M"} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
   const area = pts.length ? `${line} L ${w} ${h} L 0 ${h} Z` : "";
-  const c = tone === "brand" ? "#6366f1" : "#10b981";
+  const c = tone === "brand" ? "#e8551f" : "#10b981";
   return (
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-24 w-full" aria-hidden>
       <defs>

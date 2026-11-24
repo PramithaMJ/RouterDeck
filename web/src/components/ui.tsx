@@ -12,18 +12,18 @@ type Variant = "primary" | "secondary" | "ghost" | "danger" | "soft-danger" | "s
 type Size = "sm" | "md" | "lg" | "icon";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700 shadow-sm shadow-brand-600/20 active:bg-brand-800",
+  primary: "bg-ink hover:opacity-90 active:opacity-80",
   secondary: "surface border border-subtle text-[var(--text)] hover:bg-[var(--surface-2)] shadow-card",
   ghost: "text-[var(--text)] hover:bg-[var(--surface-2)]",
-  danger: "bg-rose-600 text-white hover:bg-rose-700 shadow-sm shadow-rose-600/20",
+  danger: "bg-rose-600 text-white hover:bg-rose-700",
   "soft-danger": "bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/20",
-  success: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-600/20",
+  success: "bg-emerald-600 text-white hover:bg-emerald-700",
 };
 const sizes: Record<Size, string> = {
   sm: "h-8 px-3 text-[13px] gap-1.5 rounded-lg",
-  md: "h-10 px-4 text-sm gap-2 rounded-xl",
-  lg: "h-12 px-5 text-[15px] gap-2 rounded-xl",
-  icon: "h-9 w-9 rounded-xl",
+  md: "h-10 px-4 text-sm gap-2 rounded-lg",
+  lg: "h-11 px-5 text-[15px] gap-2 rounded-lg",
+  icon: "h-9 w-9 rounded-lg",
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -41,7 +41,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex select-none items-center justify-center whitespace-nowrap font-medium transition-[background,box-shadow,transform,color] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-55",
+        "inline-flex select-none items-center justify-center whitespace-nowrap font-medium tracking-[-0.005em] transition-[background,box-shadow,opacity,color] disabled:pointer-events-none disabled:opacity-45",
         variants[variant],
         sizes[size],
         className,
@@ -69,7 +69,7 @@ export function CardHeader({ title, description, action, icon }: { title: ReactN
     <div className="flex items-start gap-3 px-5 pt-5 sm:px-6 sm:pt-6">
       {icon}
       <div className="min-w-0 flex-1">
-        <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
         {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
       </div>
       {action}
@@ -85,12 +85,12 @@ const tones: Record<Tone, string> = {
   green: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
   amber: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
   red: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
-  brand: "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200",
+  brand: "bg-[var(--surface-2)] text-[var(--text)] ring-1 ring-inset ring-[var(--border)]",
   blue: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
 };
 
 export function Badge({ tone = "neutral", className, children }: { tone?: Tone; className?: string; children: ReactNode }) {
-  return <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-medium", tones[tone], className)}>{children}</span>;
+  return <span className={cn("inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium tracking-wide", tones[tone], className)}>{children}</span>;
 }
 
 export function StatusDot({ tone = "green", pulse }: { tone?: "green" | "amber" | "red" | "neutral"; pulse?: boolean }) {
@@ -138,7 +138,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
     <input
       ref={ref}
       className={cn(
-        "h-11 w-full rounded-xl border border-subtle surface px-3.5 text-[15px] shadow-card outline-none transition placeholder:text-[var(--muted)] placeholder:opacity-70 focus:border-brand-400 focus:ring-4 focus:ring-brand-500/15 disabled:opacity-60",
+        "h-11 w-full rounded-lg border border-subtle surface px-3.5 text-[15px] outline-none transition placeholder:text-[var(--muted)] placeholder:opacity-70 focus:border-[var(--text)] focus:ring-2 focus:ring-[var(--text)]/10 disabled:opacity-60",
         className,
       )}
       {...rest}
@@ -203,7 +203,7 @@ export function EmptyState({ icon, title, description, action }: { icon: ReactNo
 
 export function Notice({ tone = "brand", icon, children, className }: { tone?: "brand" | "amber" | "red" | "green"; icon?: ReactNode; children: ReactNode; className?: string }) {
   const t = {
-    brand: "bg-brand-50/70 text-brand-900 border-brand-100 dark:bg-brand-500/10 dark:text-brand-100 dark:border-brand-500/20",
+    brand: "bg-[var(--surface-2)] text-[var(--text)] border-subtle",
     amber: "bg-amber-50 text-amber-900 border-amber-100 dark:bg-amber-500/10 dark:text-amber-100 dark:border-amber-500/20",
     red: "bg-rose-50 text-rose-900 border-rose-100 dark:bg-rose-500/10 dark:text-rose-100 dark:border-rose-500/20",
     green: "bg-emerald-50 text-emerald-900 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-100 dark:border-emerald-500/20",
@@ -343,7 +343,7 @@ export function Meter({ value, tone }: { value: number; tone?: "auto" | "brand" 
 
 export function Segmented<T extends string>({ value, onChange, options, className }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode }[]; className?: string }) {
   return (
-    <div className={cn("inline-flex rounded-xl bg-[var(--surface-2)] p-1", className)} role="tablist">
+    <div className={cn("inline-flex rounded-lg bg-[var(--surface-2)] p-0.5", className)} role="tablist">
       {options.map((o) => (
         <button
           key={o.value}
@@ -351,8 +351,8 @@ export function Segmented<T extends string>({ value, onChange, options, classNam
           aria-selected={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            "whitespace-nowrap rounded-lg px-3 py-1.5 text-[13px] font-medium transition",
-            value === o.value ? "surface text-[var(--text)] shadow-card" : "text-muted hover:text-[var(--text)]",
+            "whitespace-nowrap rounded-md px-3 py-1.5 text-[13px] font-medium transition",
+            value === o.value ? "surface text-[var(--text)] shadow-[0_1px_2px_rgb(0_0_0/0.08)] ring-1 ring-[var(--border)]" : "text-muted hover:text-[var(--text)]",
           )}
         >
           {o.label}

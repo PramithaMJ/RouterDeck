@@ -24,66 +24,46 @@ function InternetHero() {
   const { data, isLoading } = useOverview();
   const q = fiberQuality(data?.fiber?.rxPowerDbm);
   const isp = ispById(data?.identity.isp);
-  if (isLoading || !data) return <Skeleton className="h-[188px] rounded-3xl" />;
+  if (isLoading || !data) return <Skeleton className="h-[172px] rounded-[18px]" />;
   const online = data.internet.online;
+  const stats: { k: string; v: React.ReactNode }[] = [
+    { k: "Internet IP", v: data.internet.publicIp ? <span className="flex items-center gap-1">{data.internet.publicIp}<CopyButton value={data.internet.publicIp} /></span> : "–" },
+    { k: "Connection", v: data.cellular?.networkType ?? data.internet.protocol ?? "–" },
+    q ? { k: "Fiber signal", v: <span><span className={q.tone === "green" ? "text-emerald-600 dark:text-emerald-400" : q.tone === "amber" ? "text-amber-600 dark:text-amber-400" : "text-rose-600"}>{q.label}</span> <span className="text-muted">{data.fiber!.rxPowerDbm!.toFixed(1)} dBm</span></span> } : data.cellular ? { k: "Signal", v: <span className="flex items-center gap-2"><Bars n={data.cellular.bars ?? 0} /> {data.cellular.operator}</span> } : { k: "Router", v: data.identity.model },
+    { k: "Uptime", v: data.internet.uptime ?? data.uptime ?? "–" },
+  ];
   return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-3xl p-6 text-white shadow-pop sm:p-7",
-        online ? "bg-gradient-to-br from-brand-600 via-brand-600 to-violet-600" : "bg-gradient-to-br from-rose-600 to-rose-700",
-      )}
-    >
-      <div aria-hidden className="absolute -right-16 -top-16 size-64 rounded-full bg-white/10 blur-2xl" />
-      <div aria-hidden className="absolute -bottom-24 right-24 size-56 rounded-full bg-white/5 blur-2xl" />
-      <div className="relative flex flex-wrap items-start justify-between gap-6">
+    <div className="surface overflow-hidden rounded-[18px] border border-subtle">
+      <div className="flex flex-wrap items-center justify-between gap-4 p-6 sm:p-7">
         <div>
-          <div className="flex items-center gap-2 text-[13px] font-medium text-white/80">
-            <span className="relative inline-flex size-2.5">
-              <span className="absolute inset-0 animate-ping rounded-full bg-white/70" />
-              <span className="relative size-2.5 rounded-full bg-white" />
+          <p className="label-caps">Internet</p>
+          <p className="mt-2 flex items-center gap-3 text-[2.2rem] font-semibold leading-none tracking-[-0.035em]">
+            <span className="relative inline-flex size-3">
+              {online && <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/50" />}
+              <span className={cn("relative size-3 rounded-full", online ? "bg-emerald-500" : "bg-rose-500")} />
             </span>
-            {online ? "Connected to the internet" : "No internet connection"}
-          </div>
-          <p className="mt-3 text-3xl font-semibold tracking-tight sm:text-[2.1rem]">{online ? "You're online" : "You're offline"}</p>
-          <p className="mt-1.5 text-sm text-white/80">
-            {online ? <>Up for {data.internet.uptime ?? data.uptime ?? "-"} · {data.internet.protocol ?? "WAN"}</> : "Your router can't reach your provider. Check the fiber cable or contact your ISP."}
+            {online ? "Online" : "Offline"}
           </p>
+          <p className="mt-2 text-[14px] text-muted">{online ? "Everything looks normal." : "Your router can't reach your provider. Check the cable or contact your ISP."}</p>
         </div>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-          <div>
-            <p className="text-[12px] text-white/65">Internet IP</p>
-            <p className="mt-0.5 flex items-center gap-1 font-mono text-[13.5px]">
-              {data.internet.publicIp ?? "-"}
-              {data.internet.publicIp && <CopyButton value={data.internet.publicIp} className="text-white/70 hover:bg-white/10 hover:text-white" />}
-            </p>
-          </div>
-          <div>
-            <p className="text-[12px] text-white/65">{isp ? "Provider" : "Router"}</p>
-            <p className="mt-0.5 flex items-center gap-2 text-[13.5px] font-medium">
-              {isp && <IspLogo isp={isp} size="sm" />}
-              {isp ? isp.name : data.identity.model}
-            </p>
-          </div>
-          {data.cellular?.networkType && (
-            <div className="col-span-2">
-              <p className="text-[12px] text-white/65">Mobile signal</p>
-              <p className="mt-0.5 flex items-center gap-2 text-[13.5px] font-medium">
-                <Bars n={data.cellular.bars ?? 0} light /> {data.cellular.networkType}
-                {data.cellular.operator ? ` · ${data.cellular.operator}` : ""}
-              </p>
+        {isp && (
+          <div className="flex items-center gap-3 rounded-xl border border-subtle px-3.5 py-2.5">
+            <IspLogo isp={isp} />
+            <div>
+              <p className="label-caps">Provider</p>
+              <p className="text-[14px] font-medium">{isp.name}</p>
             </div>
-          )}
-          {q && (
-            <div className="col-span-2">
-              <p className="text-[12px] text-white/65">Fiber signal</p>
-              <p className="mt-0.5 flex items-center gap-2 text-[13.5px] font-medium">
-                {q.label}
-                <span className="font-mono text-[12px] font-normal text-white/70">{data.fiber!.rxPowerDbm!.toFixed(1)} dBm</span>
-              </p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
+      <dl className="grid grid-cols-2 border-t border-subtle sm:grid-cols-4">
+        {stats.map((s, i) => (
+          <div key={s.k} className={cn("px-6 py-4 sm:px-7", i % 2 === 1 && "border-l border-subtle", i >= 2 && "border-t border-subtle sm:border-t-0", i >= 1 && "sm:border-l")}>
+            <dt className="label-caps">{s.k}</dt>
+            <dd className="mt-1 font-mono text-[13.5px]">{s.v}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
@@ -123,7 +103,7 @@ function SignalCard() {
   return (
     <Card className="mt-6">
       <CardHeader
-        icon={c ? <SignalHigh className="size-5 text-brand-500" /> : <Satellite className="size-5 text-brand-500" />}
+        icon={c ? <SignalHigh className="size-5 text-muted" /> : <Satellite className="size-5 text-muted" />}
         title={c ? "Mobile signal" : "Starlink dish"}
         description={c ? (quality(c.rsrp) ? `Signal is ${quality(c.rsrp)!.toLowerCase()}. Move the router near a window if it drops.` : undefined) : s?.currentlyObstructed ? "Something is blocking the dish's view of the sky right now." : "Dish has a clear connection."}
         action={c ? <Bars n={c.bars ?? 0} /> : undefined}
@@ -148,13 +128,13 @@ function SignalCard() {
 
 function Tile({ icon, label, value, sub, href, children }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode; href?: string; children?: React.ReactNode }) {
   const body = (
-    <Card className={cn("h-full p-4 sm:p-5", href && "transition hover:-translate-y-0.5 hover:shadow-pop")}>
-      <div className="flex items-center gap-2 text-[12.5px] font-medium text-muted">
+    <Card className={cn("h-full p-4 sm:p-5", href && "transition hover:border-[var(--muted)]")}>
+      <div className="label-caps flex items-center gap-2">
         {icon}
         {label}
       </div>
-      <div className="mt-2.5 text-2xl font-semibold tracking-tight">{value}</div>
-      {sub && <div className="mt-0.5 text-[12.5px] text-muted">{sub}</div>}
+      <div className="mt-3 font-mono text-[1.7rem] font-medium leading-none tracking-[-0.02em]">{value}</div>
+      {sub && <div className="mt-2 text-[12.5px] text-muted">{sub}</div>}
       {children}
     </Card>
   );
@@ -168,16 +148,11 @@ function Tile({ icon, label, value, sub, href, children }: { icon: React.ReactNo
 }
 
 function QuickAction({ icon, label, onClick, href, tone = "brand" }: { icon: React.ReactNode; label: string; onClick?: () => void; href?: string; tone?: "brand" | "rose" | "amber" | "emerald" }) {
-  const t = {
-    brand: "bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-200",
-    rose: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300",
-    amber: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300",
-    emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300",
-  }[tone];
-  const cls = "group flex items-center gap-3 rounded-2xl border border-subtle surface p-3.5 text-left shadow-card transition hover:-translate-y-0.5 hover:shadow-pop";
+  const t = tone === "rose" ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300" : "bg-[var(--surface-2)] text-[var(--text)]";
+  const cls = "group flex items-center gap-3 rounded-xl border border-subtle surface px-3.5 py-3 text-left transition hover:border-[var(--muted)]";
   const inner = (
     <>
-      <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", t)}>{icon}</span>
+      <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", t)}>{icon}</span>
       <span className="flex-1 text-[14px] font-medium">{label}</span>
       <ArrowRight className="size-4 text-muted transition group-hover:translate-x-0.5" />
     </>
@@ -249,7 +224,7 @@ export default function DashboardPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.15fr]">
         <section>
-          <h2 className="mb-3 text-[13px] font-semibold uppercase tracking-wider text-muted">Quick actions</h2>
+          <h2 className="label-caps mb-3">Quick actions</h2>
           <div className="grid gap-2.5">
             <QuickAction icon={<Gauge className="size-5" />} label="Run a speed test" href="/speed-test/" />
             {caps?.wifi && <QuickAction icon={<QrCode className="size-5" />} label="Share Wi-Fi with a QR code" onClick={() => firstNet && setShare(firstNet)} />}
@@ -311,7 +286,7 @@ export default function DashboardPage() {
                 <div key={w.name} className="rounded-2xl bg-[var(--surface-2)] p-4">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-2 text-[14px] font-medium">
-                      <Icon className="size-4 text-brand-500" /> {label}
+                      <Icon className="size-4 text-muted" /> {label}
                     </span>
                     <Badge tone={w.up ? "green" : "red"}>{w.up ? "Up" : "Down"}</Badge>
                   </div>

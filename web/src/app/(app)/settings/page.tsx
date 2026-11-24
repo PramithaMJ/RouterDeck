@@ -55,7 +55,7 @@ function RebootOverlay({ onDone }: { onDone: () => void }) {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[color-mix(in_oklch,var(--bg)_80%,transparent)] p-6 backdrop-blur-md">
       <Card className="w-full max-w-sm p-7 text-center shadow-pop">
-        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-200">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[var(--surface-2)] text-[var(--text)]">
           <RotateCcw className="size-6 animate-spin [animation-duration:2.5s]" />
         </div>
         <h2 className="mt-5 text-lg font-semibold">Restarting your router</h2>
@@ -118,7 +118,7 @@ export default function SettingsPage() {
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Your router" icon={<Router className="size-5 text-brand-500" />} />
+          <CardHeader title="Your router" icon={<Router className="size-5 text-muted" />} />
           <div className="divide-y divide-[var(--border)] px-5 pb-3 pt-2 sm:px-6">
             {data?.identity.isp && (
               <div className="flex items-center justify-between gap-4 py-2.5 text-[14px]">
@@ -137,7 +137,7 @@ export default function SettingsPage() {
         </Card>
 
         {caps?.adminPassword && <Card>
-          <CardHeader title="Router admin password" description="The password you use to sign in here (not the Wi-Fi password)." icon={<KeyRound className="size-5 text-brand-500" />} />
+          <CardHeader title="Router admin password" description="The password you use to sign in here (not the Wi-Fi password)." icon={<KeyRound className="size-5 text-muted" />} />
           <form
             className="space-y-4 p-5 sm:p-6"
             onSubmit={async (e) => {
@@ -167,7 +167,7 @@ export default function SettingsPage() {
         </Card>}
 
         {caps?.reboot && <Card id="restart">
-          <CardHeader title="Restart router" description="Fixes most slow or stuck connections. Also saves settings permanently." icon={<Power className="size-5 text-brand-500" />} />
+          <CardHeader title="Restart router" description="Fixes most slow or stuck connections. Also saves settings permanently." icon={<Power className="size-5 text-muted" />} />
           <div className="p-5 sm:p-6">
             <Button variant="secondary" onClick={() => setRebootAsk(true)}>
               <RotateCcw className="size-4" /> Restart now
@@ -176,7 +176,7 @@ export default function SettingsPage() {
         </Card>}
 
         <Card>
-          <CardHeader title="This app" icon={<Plug className="size-5 text-brand-500" />} />
+          <CardHeader title="This app" icon={<Plug className="size-5 text-muted" />} />
           <div className="space-y-5 p-5 sm:p-6">
             <div className="flex items-center justify-between gap-3 text-[14px]">
               <span className="text-muted">Connected via</span>

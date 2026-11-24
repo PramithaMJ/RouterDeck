@@ -41,7 +41,7 @@ export function ExtensionSetupDialog({ open, onClose }: { open: boolean; onClose
       size="lg"
       title={
         <span className="flex items-center gap-2">
-          <Puzzle className="size-5 text-brand-500" /> Install the RouterDeck extension
+          <Puzzle className="size-5 text-muted" /> Install the RouterDeck extension
         </span>
       }
       description="Works in Chrome, Edge, Brave and other Chromium browsers on a computer connected to your home Wi-Fi."
@@ -120,7 +120,7 @@ export function ConnectorSetupDialog({ open, onClose }: { open: boolean; onClose
       size="lg"
       title={
         <span className="flex items-center gap-2">
-          <Terminal className="size-5 text-brand-500" /> Run the local connector
+          <Terminal className="size-5 text-muted" /> Run the local connector
         </span>
       }
       description="For Firefox, Safari or anyone who prefers not to install an extension. Needs Node.js 18+ on a computer in your home network."

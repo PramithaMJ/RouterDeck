@@ -20,7 +20,7 @@ export function Toaster() {
           <span className="mt-0.5 shrink-0">
             {t.kind === "success" && <CheckCircle2 className="size-[18px] text-emerald-500" />}
             {t.kind === "error" && <XCircle className="size-[18px] text-rose-500" />}
-            {t.kind === "info" && <Info className="size-[18px] text-brand-500" />}
+            {t.kind === "info" && <Info className="size-[18px] text-muted" />}
             {t.kind === "loading" && <Loader2 className="size-[18px] animate-spin text-brand-500" />}
           </span>
           <span className="leading-snug">{t.message}</span>

@@ -47,7 +47,7 @@ function Menu() {
           ))}
         {groups.map((g) => (
           <Card key={g.title} className="p-2">
-            <p className="px-3 pb-1 pt-2.5 text-[12px] font-semibold uppercase tracking-wider text-muted">{g.title}</p>
+            <p className="px-3 pb-1 pt-2.5 label-caps">{g.title}</p>
             <ul>
               {g.items.map((i) => (
                 <li key={i.id}>

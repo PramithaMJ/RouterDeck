@@ -34,13 +34,13 @@ const STEPS: { phase: Phase; label: string; icon: typeof Timer }[] = [
 
 function Stat({ icon, label, value, unit, hint, active, tone }: { icon: React.ReactNode; label: string; value?: number; unit: string; hint?: string; active?: boolean; tone?: string }) {
   return (
-    <div className={cn("rounded-2xl border p-4 transition", active ? "border-brand-300 bg-brand-50/50 shadow-card dark:border-brand-400/40 dark:bg-brand-500/10" : "border-subtle surface")}>
-      <div className="flex items-center gap-1.5 text-[12.5px] font-medium text-muted">
+    <div className={cn("rounded-xl border p-4 transition", active ? "border-[var(--text)] surface" : "border-subtle surface")}>
+      <div className="label-caps flex items-center gap-1.5">
         <span className={tone}>{icon}</span>
         {label}
       </div>
       <div className="mt-1.5 flex items-baseline gap-1">
-        <span className="text-[1.65rem] font-semibold tracking-tight tabular-nums">{value === undefined ? "–" : value >= 100 ? Math.round(value) : value.toFixed(1)}</span>
+        <span className="font-mono text-[1.6rem] font-medium tracking-[-0.02em]">{value === undefined ? "–" : value >= 100 ? Math.round(value) : value.toFixed(1)}</span>
         <span className="text-[13px] text-muted">{unit}</span>
       </div>
       {hint && <p className="mt-0.5 text-[11.5px] text-muted">{hint}</p>}
@@ -110,7 +110,6 @@ export default function SpeedTestPage() {
 
       <div className="grid gap-5 lg:grid-cols-[1.05fr_1fr]">
         <Card className="relative overflow-hidden p-5 sm:p-7">
-          <div aria-hidden className="pointer-events-none absolute -top-24 left-1/2 size-80 -translate-x-1/2 rounded-full bg-brand-500/10 blur-3xl" />
 
           {/* Steps */}
           <ol className="relative mb-2 grid grid-cols-3 gap-2">
@@ -137,12 +136,12 @@ export default function SpeedTestPage() {
               <div className="absolute inset-0 flex items-center justify-center">
                 <button
                   onClick={start}
-                  className="group relative flex size-36 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-violet-600 text-white shadow-[0_20px_50px_-12px] shadow-brand-600/60 transition hover:scale-[1.03] active:scale-95"
+                  className="bg-ink group relative flex size-36 items-center justify-center rounded-full shadow-pop transition hover:scale-[1.03] active:scale-95"
                   aria-label="Start speed test"
                 >
-                  <span className="absolute inset-0 animate-ping rounded-full bg-brand-500/25 [animation-duration:2.2s]" />
-                  <span className="absolute -inset-3 rounded-full border-2 border-brand-400/40" />
-                  <span className="relative text-3xl font-bold tracking-[0.12em]">GO</span>
+                  <span className="absolute -inset-2 animate-ping rounded-full border border-brand-500/40 [animation-duration:2.4s]" />
+                  <span className="absolute -inset-3 rounded-full border border-[var(--border)]" />
+                  <span className="relative font-mono text-[26px] font-medium tracking-[0.18em]">GO</span>
                 </button>
               </div>
             )}
@@ -238,7 +237,7 @@ export default function SpeedTestPage() {
         <Card className="mt-5">
           <div className="flex items-center justify-between px-5 pt-5 sm:px-6">
             <h2 className="flex items-center gap-2 text-[15px] font-semibold">
-              <History className="size-4 text-brand-500" /> Recent tests
+              <History className="size-4 text-muted" /> Recent tests
             </h2>
             <Button
               variant="ghost"

@@ -4,7 +4,7 @@
 
 # RouterDeck
 
-**Your home Wi-Fi, finally simple.**
+**Your router, without the old admin page.**
 
 A modern, mobile-friendly dashboard for home routers. Block a device, change the Wi-Fi password,
 run a speed test or check your connection in seconds, on SLT-Mobitel fiber, Dialog / Mobitel / Hutch 4G routers,
@@ -21,26 +21,26 @@ Starlink and more.
 
 ## Features
 
-| | |
+| Feature | What it does |
 | --- | --- |
-| 📡 **Auto-detect** | Finds your router and recognises your provider (SLT-Mobitel, Dialog, Mobitel, Hutch, Airtel, Starlink) with its logo |
-| 📱 **Devices** | See who's online, rename devices, **block / unblock** in one tap, or switch to an **allow list** (only approved devices get internet) |
-| 📶 **Wi-Fi** | Rename networks, change or **generate** passwords, turn 2.4/5 GHz on/off, **share with a QR code** |
-| ⚡ **Speed test** | Download, upload, ping, jitter and loaded latency with a live animated gauge, history and plain-language verdicts |
-| 🛡️ **Protection** | Block websites for the whole network |
-| 🎛️ **All settings** | *Every* page of the router's own admin UI (DHCP, port forwarding, DMZ, UPnP, IPv6, diagnostics…) re-rendered as clean, modern forms |
-| 🔭 **Line health** | Fiber Rx/Tx power, 4G signal (RSRP/SINR/bars), Starlink latency and obstructions |
-| 🔐 **Admin** | Change the router password, restart safely |
-| 🌗 | Light & dark mode, works great on phones |
+| **Auto-detect** | Finds your router and recognises your provider (SLT-Mobitel, Dialog, Mobitel, Hutch, Airtel, Starlink) with its logo |
+| **Devices** | See who's online, rename devices, **block / unblock** in one tap, or switch to an **allow list** (only approved devices get internet) |
+| **Wi-Fi** | Rename networks, change or **generate** passwords, turn 2.4/5 GHz on/off, **share with a QR code** |
+| **Speed test** | Download, upload, ping, jitter and loaded latency with a live animated gauge, history and plain-language verdicts |
+| **Protection** | Block websites for the whole network |
+| **All settings** | *Every* page of the router's own admin UI (DHCP, port forwarding, DMZ, UPnP, IPv6, diagnostics…) re-rendered as clean, modern forms |
+| **Line health** | Fiber Rx/Tx power, 4G signal (RSRP/SINR/bars), Starlink latency and obstructions |
+| **Admin** | Change the router password, restart safely |
+| **Design** | Light & dark mode, works on phones and desktops |
 
 ## Supported routers
 
 | Router | ISPs | Status |
 | --- | --- | --- |
-| Realtek GPON ONTs (e.g. **HG7**) | SLT-Mobitel fiber | ✅ Verified on hardware |
-| Huawei HiLink 4G/5G (B310, B311, B315, B525, B535, E5576…) | Dialog, Mobitel, Hutch, Airtel | 🧪 Beta |
-| Starlink dish (status) | Starlink | 🧪 Beta, read-only |
-| Huawei EchoLife, ZTE ZXHN, ZTE 4G, TP-Link | Dialog Fiber, SLT, others | 🗺️ Planned, [help add yours](docs/ADDING_A_ROUTER.md) |
+| Realtek GPON ONTs (e.g. **HG7**) | SLT-Mobitel fiber | Verified on hardware |
+| Huawei HiLink 4G/5G (B310, B311, B315, B525, B535, E5576…) | Dialog, Mobitel, Hutch, Airtel | Beta |
+| Starlink dish (status) | Starlink | Beta, read-only |
+| Huawei EchoLife, ZTE ZXHN, ZTE 4G, TP-Link | Dialog Fiber, SLT, others | Planned, [help add yours](docs/ADDING_A_ROUTER.md) |
 
 ## How it works (and why there's no backend)
 
