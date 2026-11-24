@@ -163,6 +163,46 @@ function NetworkCard({ n, others, onShare }: { n: WifiNetwork; others: WifiNetwo
   );
 }
 
+/**
+ * When 2.4 and 5 GHz share one name, phones show a single network and pick the
+ * band themselves ("band steering"). Explain it, and offer separate names for
+ * people who want to choose the band.
+ */
+function SameNameNotice({ data }: { data: WifiNetwork[] }) {
+  const n24 = data.find((n) => n.band === "2.4GHz" && n.enabled);
+  const n5 = data.find((n) => n.band === "5GHz" && n.enabled);
+  const [ask, setAsk] = useState(false);
+  const target = n24 && n5 ? `${n5.ssid.slice(0, 29)}-5G` : "";
+  const split = useRouterAction<void>((drv) => drv.updateWifi(n5!.id, { ssid: target }), {
+    invalidate: [qk.wifi],
+    pending: "Renaming the 5 GHz network…",
+    success: `Done. You'll now see "${n24?.ssid}" and "${target}".`,
+  });
+  if (!n24 || !n5 || n24.ssid !== n5.ssid || !n5.editable.ssid) return null;
+  return (
+    <Notice tone="brand" icon={<Wifi />} className="mb-5">
+      Both bands use the name <b>{n24.ssid}</b>, so phones and laptops show <b>one</b> network and switch between 2.4 GHz and 5 GHz by themselves. That&apos;s usually best.
+      <span className="mt-1 block">Want to choose the band yourself? Give 5 GHz its own name and you&apos;ll see two networks.</span>
+      <div className="mt-2.5">
+        <Button size="sm" variant="secondary" onClick={() => setAsk(true)} loading={split.isPending}>
+          Use separate names
+        </Button>
+      </div>
+      <ConfirmDialog
+        open={ask}
+        onClose={() => setAsk(false)}
+        onConfirm={async () => {
+          setAsk(false);
+          await split.mutateAsync().catch(() => undefined);
+        }}
+        title={`Rename 5 GHz to "${target}"?`}
+        description={`Your 2.4 GHz network stays "${n24.ssid}". Devices on 5 GHz drop for a moment and move to 2.4 GHz until you join "${target}" (same password). You can rename it back any time.`}
+        confirmLabel="Rename 5 GHz"
+      />
+    </Notice>
+  );
+}
+
 export default function WifiPage() {
   const { data, isLoading, refetch, isFetching, error } = useWifi();
   const [share, setShare] = useState<WifiNetwork | null>(null);
@@ -183,6 +223,7 @@ export default function WifiPage() {
         </Notice>
       )}
       <GuestPassCard mainSsid={data?.find((n) => n.band === "2.4GHz")?.ssid ?? data?.[0]?.ssid} />
+      {data && <SameNameNotice data={data} />}
       <div className="grid gap-5 lg:grid-cols-2">
         {isLoading &&
           [0, 1].map((i) => (
