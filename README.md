@@ -34,7 +34,7 @@ Starlink and more.
 | **Line health** | Fiber Rx/Tx power, 4G signal (RSRP/SINR/bars), Starlink latency and obstructions |
 | **Admin** | Change the router password, restart safely |
 | **Phones** | Full app on iPhone & Android via RouterDeck Connect (QR pairing), installable to the home screen |
-| **Design** | Light & dark mode, works on phones and desktops |
+| **Design** | Light, dark or match-the-system theme everywhere (website, phones, desktop app window, menus and tray, extension). **Simple** view for everyday use or **Advanced** view with every router option and technical details |
 
 ## Supported routers
 

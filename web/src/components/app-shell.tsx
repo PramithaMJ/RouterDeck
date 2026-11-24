@@ -12,9 +12,10 @@ import { Logo, LogoMark } from "./brand";
 import { IspLogo } from "./isp-badge";
 import { GuestPassWatcher } from "./guest-pass";
 import { ThemeToggle } from "./theme-toggle";
+import { usePrefs } from "@/lib/preferences";
 import { Badge, cn, Spinner, StatusDot } from "./ui";
 
-type NavItem = { href: string; label: string; short?: string; icon: typeof Wifi; cap?: keyof DriverCapabilities; public?: boolean; mobile?: boolean };
+type NavItem = { href: string; label: string; short?: string; icon: typeof Wifi; cap?: keyof DriverCapabilities; public?: boolean; mobile?: boolean; advanced?: boolean };
 
 export const NAV: NavItem[] = [
   { href: "/dashboard/", label: "Home", icon: LayoutGrid, mobile: true },
@@ -22,7 +23,7 @@ export const NAV: NavItem[] = [
   { href: "/wifi/", label: "Wi-Fi", icon: Wifi, cap: "wifi", mobile: true },
   { href: "/protection/", label: "Protection", icon: ShieldCheck, cap: "siteBlocking" },
   { href: "/speed-test/", label: "Speed test", short: "Speed", icon: Gauge, public: true, mobile: true },
-  { href: "/advanced/", label: "All settings", icon: SlidersHorizontal, cap: "advanced" },
+  { href: "/advanced/", label: "All settings", icon: SlidersHorizontal, cap: "advanced", advanced: true },
   { href: "/settings/", label: "Settings", icon: Settings },
 ];
 
@@ -76,6 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isPublic = PUBLIC_ROUTES.some((r) => path.startsWith(r));
   const connected = phase === "connected";
   const [mounted, setMounted] = useState(false);
+  const view = usePrefs((s) => s.view);
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
@@ -94,7 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const caps = driver?.capabilities;
-  const items = NAV.filter((n) => (connected ? !n.cap || caps?.[n.cap] : n.public));
+  const items = NAV.filter((n) => (connected ? (!n.cap || caps?.[n.cap]) && (!n.advanced || view === "advanced") : n.public));
   const mobileItems = connected ? [...items.filter((n) => n.mobile), { href: "/settings/", label: "More", icon: Menu }] : items;
 
   return (

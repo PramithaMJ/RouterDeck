@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronRight, Gauge, KeyRound, LogOut, Monitor, Moon, Plug, Power, RotateCcw, Router, ShieldCheck, SlidersHorizontal, Sun } from "lucide-react";
+import { ChevronRight, Gauge, KeyRound, LogOut, Monitor, Moon, Palette, Plug, Power, RotateCcw, Router, ShieldCheck, SlidersHorizontal, Sun } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { IspBadge } from "@/components/isp-badge";
 import { PhoneSetup } from "@/components/phone-setup";
@@ -11,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/app-shell";
 import { useTheme } from "@/components/theme-toggle";
+import { usePrefs, type ViewMode } from "@/lib/preferences";
 import { Badge, Button, Card, CardHeader, ConfirmDialog, CopyButton, Field, Notice, PasswordInput, Segmented, Spinner } from "@/components/ui";
 import { resetDemo } from "@/lib/drivers/demo";
 import { passwordStrength } from "@/lib/password";
@@ -79,6 +81,16 @@ export default function SettingsPage() {
   const signOut = useSession((s) => s.signOut);
   const expire = useSession((s) => s.expire);
   const { theme, setTheme } = useTheme();
+  const view = usePrefs((s) => s.view);
+  const setView = usePrefs((s) => s.setView);
+  const advanced = view === "advanced";
+  const driver = useSession((s) => s.driver);
+  const menu = useQuery({
+    queryKey: ["advanced-menu"],
+    queryFn: () => driver!.getAdvancedMenu!(),
+    enabled: advanced && !!caps?.advanced && !!driver?.getAdvancedMenu,
+    staleTime: Infinity,
+  });
 
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -101,14 +113,51 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="Settings" description="Router details, admin password and restart." />
+      <PageHeader title="Settings" description="Appearance, your router, its admin password and every advanced option." />
+
+      <Card className="mb-5">
+        <CardHeader title="Appearance and view" description="Applies to this browser or app." icon={<Palette className="size-5 text-muted" />} />
+        <div className="divide-y divide-[var(--border)] px-5 pb-2 sm:px-6">
+          <div className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[14px] font-medium">Theme</p>
+              <p className="text-[12.5px] text-muted">Light, dark, or follow your {desktopBridge() ? "computer" : "device"}&apos;s setting.</p>
+            </div>
+            <Segmented
+              value={theme}
+              onChange={setTheme}
+              options={[
+                { value: "system", label: <span className="flex items-center gap-1.5"><Monitor className="size-3.5" /> System</span> },
+                { value: "light", label: <span className="flex items-center gap-1.5"><Sun className="size-3.5" /> Light</span> },
+                { value: "dark", label: <span className="flex items-center gap-1.5"><Moon className="size-3.5" /> Dark</span> },
+              ]}
+            />
+          </div>
+          <div className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[14px] font-medium">Settings view</p>
+              <p className="text-[12.5px] text-muted">
+                {advanced ? "Advanced: every router option, plus technical details like MAC addresses, signal in dBm and firmware." : "Simple: just the everyday things. Good for family members."}
+              </p>
+            </div>
+            <Segmented<ViewMode>
+              value={view}
+              onChange={setView}
+              options={[
+                { value: "simple", label: "Simple" },
+                { value: "advanced", label: "Advanced" },
+              ]}
+            />
+          </div>
+        </div>
+      </Card>
 
       {/* Mobile "More" hub */}
       <Card className="mb-5 p-2 lg:hidden">
         {[
           { href: "/speed-test/", label: "Speed test", icon: Gauge, show: true },
           { href: "/protection/", label: "Protection · block websites", icon: ShieldCheck, show: !!caps?.siteBlocking },
-          { href: "/advanced/", label: "All router settings", icon: SlidersHorizontal, show: !!caps?.advanced },
+          { href: "/advanced/", label: "All router settings", icon: SlidersHorizontal, show: !!caps?.advanced && advanced },
         ]
           .filter((l) => l.show)
           .map((l) => (
@@ -131,12 +180,16 @@ export default function SettingsPage() {
               </div>
             )}
             <Row label="Model" value={data?.identity.model} />
-            <Row label="Firmware" value={data?.identity.firmware} />
-            <Row label="Hardware" value={data?.identity.hardware} />
             <Row label="Router address" value={data?.lan.ip} copy />
-            <Row label="Router MAC" value={data?.lan.mac?.toUpperCase()} copy />
-            <Row label="DNS servers" value={data?.dns.slice(0, 2).join(", ")} />
-            {data?.fiber?.rxPowerDbm !== undefined && <Row label="Fiber Rx / Tx" value={`${data.fiber.rxPowerDbm.toFixed(1)} / ${data.fiber.txPowerDbm?.toFixed(1) ?? "-"} dBm`} />}
+            {advanced && (
+              <>
+                <Row label="Firmware" value={data?.identity.firmware} />
+                <Row label="Hardware" value={data?.identity.hardware} />
+                <Row label="Router MAC" value={data?.lan.mac?.toUpperCase()} copy />
+                <Row label="DNS servers" value={data?.dns.slice(0, 2).join(", ")} />
+              </>
+            )}
+            {advanced && data?.fiber?.rxPowerDbm !== undefined && <Row label="Fiber Rx / Tx" value={`${data.fiber.rxPowerDbm.toFixed(1)} / ${data.fiber.txPowerDbm?.toFixed(1) ?? "-"} dBm`} />}
           </div>
         </Card>
 
@@ -186,18 +239,6 @@ export default function SettingsPage() {
               <span className="text-muted">Connected via</span>
               <Badge tone={connection?.transport === "demo" ? "amber" : "green"}>{transport?.label ?? "-"}</Badge>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 text-[14px]">
-              <span className="text-muted">Appearance</span>
-              <Segmented
-                value={theme}
-                onChange={setTheme}
-                options={[
-                  { value: "system", label: <Monitor className="size-4" aria-label="System" /> },
-                  { value: "light", label: <Sun className="size-4" aria-label="Light" /> },
-                  { value: "dark", label: <Moon className="size-4" aria-label="Dark" /> },
-                ]}
-              />
-            </div>
             <div className="flex flex-wrap gap-2 pt-1">
               <Button
                 variant="secondary"
@@ -223,6 +264,42 @@ export default function SettingsPage() {
           </div>
         </Card>
       </div>
+
+      {caps?.advanced && (
+        <Card className="mt-5">
+          <CardHeader
+            title="Advanced router settings"
+            description={advanced ? "Every page of your router's own admin settings, in a cleaner layout." : "Hidden in the Simple view."}
+            icon={<SlidersHorizontal className="size-5 text-muted" />}
+            action={
+              advanced ? (
+                <Link href="/advanced/" className="inline-flex h-8 items-center gap-1 rounded-lg border border-subtle px-3 text-[13px] font-medium transition hover:border-[var(--text)]">
+                  Open all <ChevronRight className="size-3.5" />
+                </Link>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={() => setView("advanced")}>
+                  Show
+                </Button>
+              )
+            }
+          />
+          {advanced && (
+            <div className="flex flex-wrap gap-1.5 px-5 pb-5 sm:px-6">
+              {menu.isLoading && <Spinner />}
+              {menu.data?.map((g) => (
+                <Link
+                  key={g.title}
+                  href={`/advanced/?q=${encodeURIComponent(g.title)}`}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--surface-2)] px-3 text-[13px] font-medium transition hover:bg-[var(--border)]"
+                >
+                  {g.title} <span className="font-mono text-[11.5px] text-muted">{g.items.length}</span>
+                </Link>
+              ))}
+              {menu.error && <p className="text-[13px] text-muted">{describeError(menu.error)}</p>}
+            </div>
+          )}
+        </Card>
+      )}
 
       <DesktopPrefsCard />
 

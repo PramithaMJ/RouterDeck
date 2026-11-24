@@ -2,41 +2,22 @@
 
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
+import { usePrefs, type Theme } from "@/lib/preferences";
 import { cn } from "./ui";
 
-export type Theme = "system" | "light" | "dark";
-const KEY = "routerdeck.theme";
+export type { Theme };
 
-function apply(t: Theme) {
-  const dark = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.classList.toggle("dark", dark);
-}
-
+/** Shared theme state (every toggle and the Settings page stay in sync). */
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>("system");
-  useEffect(() => {
-    try {
-      setTheme((localStorage.getItem(KEY) as Theme) || "system");
-    } catch {}
-  }, []);
-  useEffect(() => {
-    apply(theme);
-    if (theme !== "system") return;
-    const mq = matchMedia("(prefers-color-scheme: dark)");
-    const on = () => apply("system");
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, [theme]);
-  return {
-    theme,
-    setTheme(t: Theme) {
-      try {
-        localStorage.setItem(KEY, t);
-      } catch {}
-      setTheme(t);
-    },
-  };
+  const theme = usePrefs((s) => s.theme);
+  const setTheme = usePrefs((s) => s.setTheme);
+  // Server render and first client render both use "system" to avoid a hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return { theme: mounted ? theme : ("system" as Theme), setTheme };
 }
+
+const LABEL: Record<Theme, string> = { system: "System", light: "Light", dark: "Dark" };
 
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
@@ -46,8 +27,8 @@ export function ThemeToggle({ className }: { className?: string }) {
     <button
       onClick={() => setTheme(next)}
       className={cn("inline-flex size-9 items-center justify-center rounded-xl text-muted transition hover:bg-[var(--surface-2)] hover:text-[var(--text)]", className)}
-      aria-label={`Theme: ${theme}. Switch to ${next}`}
-      title={`Theme: ${theme}`}
+      aria-label={`Appearance: ${LABEL[theme]}. Switch to ${LABEL[next]}`}
+      title={`Appearance: ${LABEL[theme]} (click for ${LABEL[next]})`}
     >
       <Icon className="size-[18px]" />
     </button>

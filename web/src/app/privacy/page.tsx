@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Logo } from "@/components/brand";
 import { BuiltByFooter } from "@/components/built-by";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata: Metadata = { alternates: { canonical: "/privacy/" }, title: "Privacy", description: "What RouterDeck, RouterDeck Connect and the RouterDeck extension do with your data: nothing leaves your home network." };
 
@@ -44,6 +45,7 @@ export default function PrivacyPage() {
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-3xl items-center justify-between px-4 py-5 sm:px-6">
         <Logo />
+        <ThemeToggle />
       </header>
       <main className="mx-auto max-w-3xl px-4 pb-20 pt-6 sm:px-6">
         <p className="label-caps">Privacy policy · updated November 2026</p>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Logo } from "@/components/brand";
 import { BuiltByFooter } from "@/components/built-by";
 import { DownloadPicker } from "@/components/download-picker";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/download/" },
@@ -22,9 +23,12 @@ export default function DownloadPage() {
     <div className="min-h-dvh">
       <header className="mx-auto flex max-w-4xl items-center justify-between px-4 py-5 sm:px-6">
         <Logo />
-        <Link href="/" className="text-[13.5px] text-muted transition hover:text-[var(--text)]">
-          Use it in the browser instead
-        </Link>
+        <div className="flex items-center gap-1">
+          <Link href="/" className="hidden rounded-lg px-3 py-2 text-[13.5px] text-muted transition hover:text-[var(--text)] sm:inline-flex">
+            Use it in the browser instead
+          </Link>
+          <ThemeToggle />
+        </div>
       </header>
       <main className="mx-auto max-w-4xl px-4 pb-20 pt-6 sm:px-6">
         <p className="label-caps">Desktop app · Windows · macOS · Linux</p>

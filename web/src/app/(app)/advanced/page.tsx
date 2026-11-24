@@ -11,9 +11,9 @@ import { Card, EmptyState, Input, Notice, Skeleton } from "@/components/ui";
 import type { LivePage } from "@/lib/router/types";
 import { describeError, useSession } from "@/lib/session";
 
-function Menu() {
+function Menu({ initialQuery = "" }: { initialQuery?: string }) {
   const driver = useSession((s) => s.driver);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQuery);
   const { data, isLoading, error } = useQuery({
     queryKey: ["advanced-menu"],
     queryFn: () => driver!.getAdvancedMenu!(),
@@ -131,7 +131,7 @@ function PageView({ id, title }: { id: string; title: string }) {
 function Inner() {
   const params = useSearchParams();
   const page = params.get("page");
-  return page ? <PageView id={page} title={params.get("title") ?? "Settings"} /> : <Menu />;
+  return page ? <PageView id={page} title={params.get("title") ?? "Settings"} /> : <Menu initialQuery={params.get("q") ?? ""} />;
 }
 
 export default function AdvancedPage() {

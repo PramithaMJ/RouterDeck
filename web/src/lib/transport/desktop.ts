@@ -38,6 +38,10 @@ export interface DesktopBridge {
   /** status: available (downloading itself) | manual (needs a download) | latest | error | unavailable */
   checkForUpdates(): Promise<{ status: string; version?: string }>;
   openDownloads?(): Promise<void>;
+  /** Keeps the window frame, menus and dialogs in the same light/dark mode. */
+  setTheme?(theme: "system" | "light" | "dark"): Promise<string>;
+  /** The tray / View menu changed the appearance. */
+  onTheme?(cb: (theme: "system" | "light" | "dark") => void): void;
 }
 
 declare global {

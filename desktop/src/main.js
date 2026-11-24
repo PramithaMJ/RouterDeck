@@ -6,7 +6,7 @@
 // with phones on the Wi-Fi, remembers the router password in the OS keychain.
 "use strict";
 
-const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, nativeTheme, protocol, safeStorage, shell } = require("electron");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -44,6 +44,39 @@ function loadSettings() {
     settings = { ...DEFAULTS };
   }
 }
+// Appearance (light / dark / follow the system). The web app owns the choice and
+// reports it here; the tray and View menu can change it too. Window frame,
+// menus and dialogs follow it through nativeTheme.
+const THEMES = ["system", "light", "dark"];
+const BG = { light: "#f7f6f2", dark: "#121110" };
+function currentTheme() {
+  return THEMES.includes(settings.theme) ? settings.theme : "system";
+}
+function windowBackground() {
+  return nativeTheme.shouldUseDarkColors ? BG.dark : BG.light;
+}
+function setTheme(theme, { fromApp } = {}) {
+  if (!THEMES.includes(theme)) return currentTheme();
+  const changed = theme !== currentTheme();
+  settings.theme = theme;
+  nativeTheme.themeSource = theme;
+  if (changed) {
+    saveSettings();
+    buildTrayMenu();
+    setAppMenu();
+  }
+  win?.setBackgroundColor(windowBackground());
+  if (!fromApp) win?.webContents.send("rd:theme", theme);
+  return theme;
+}
+function appearanceMenu() {
+  return [
+    { label: "Match system", value: "system" },
+    { label: "Light", value: "light" },
+    { label: "Dark", value: "dark" },
+  ].map((o) => ({ label: o.label, type: "radio", checked: currentTheme() === o.value, click: () => setTheme(o.value) }));
+}
+
 function saveSettings() {
   try {
     fs.mkdirSync(path.dirname(SETTINGS_FILE()), { recursive: true });
@@ -115,7 +148,7 @@ function createWindow({ show }) {
     minWidth: 380,
     minHeight: 560,
     title: "RouterDeck",
-    backgroundColor: "#f7f6f2",
+    backgroundColor: windowBackground(),
     show: false,
     autoHideMenuBar: !IS_MAC,
     icon: IS_MAC ? undefined : path.join(TRAY_DIR, "icon.png"),
@@ -169,6 +202,7 @@ function buildTrayMenu() {
       { label: "Share with phones on Wi-Fi", type: "checkbox", checked: settings.shareWithPhones, click: (i) => applySettings({ shareWithPhones: i.checked }) },
       { label: "Keep running in background", type: "checkbox", checked: settings.runInBackground, click: (i) => applySettings({ runInBackground: i.checked }) },
       { label: "Start at login", type: "checkbox", checked: settings.startAtLogin, click: (i) => applySettings({ startAtLogin: i.checked }) },
+      { label: "Appearance", submenu: appearanceMenu() },
       { type: "separator" },
       { label: "Check for updates", click: () => void checkForUpdates(true) },
       { label: `Version ${app.getVersion()}`, enabled: false },
@@ -200,7 +234,7 @@ function setAppMenu() {
   const template = [
     ...(IS_MAC ? [{ role: "appMenu" }] : [{ label: "File", submenu: [{ label: "Quit", accelerator: "Ctrl+Q", click: () => ((quitting = true), app.quit()) }] }]),
     { role: "editMenu" },
-    { label: "View", submenu: [{ role: "reload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" }, ...(app.isPackaged ? [] : [{ role: "toggleDevTools" }])] },
+    { label: "View", submenu: [{ label: "Appearance", submenu: appearanceMenu() }, { type: "separator" }, { role: "reload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { type: "separator" }, { role: "togglefullscreen" }, ...(app.isPackaged ? [] : [{ role: "toggleDevTools" }])] },
     { role: "windowMenu" },
     { role: "help", submenu: [{ label: "RouterDeck website", click: () => shell.openExternal("https://router.pramitha.lk") }, { label: "Report a problem", click: () => shell.openExternal("https://github.com/PramithaMJ/RouterDeck/issues") }] },
   ];
@@ -337,6 +371,7 @@ function registerIpc() {
   ipcMain.on("rd:info", (event) => {
     event.returnValue = fromApp(event) ? { version: app.getVersion(), platform: `${process.platform === "darwin" ? "macOS" : process.platform === "win32" ? "Windows" : "Linux"} ${os.release()}` } : null;
   });
+  handle("rd:theme:set", (theme) => setTheme(String(theme), { fromApp: true }));
   handle("rd:request", async (req) => {
     try {
       return { ok: true, result: await rc.routerFetch(req || {}) };
@@ -395,6 +430,8 @@ app.on("window-all-closed", () => {
 
 app.whenReady().then(() => {
   loadSettings();
+  nativeTheme.themeSource = currentTheme();
+  nativeTheme.on("updated", () => win?.setBackgroundColor(windowBackground()));
   registerAppProtocol();
   registerIpc();
   setAppMenu();

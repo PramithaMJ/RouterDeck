@@ -28,6 +28,11 @@ contextBridge.exposeInMainWorld("routerdeckDesktop", {
     status: () => call("rd:share:status"),
     set: (on) => call("rd:share:set", on),
   },
+  setTheme: (theme) => call("rd:theme:set", theme),
+  onTheme: (cb) => {
+    if (typeof cb !== "function") return;
+    ipcRenderer.on("rd:theme", (_e, theme) => cb(theme));
+  },
   checkForUpdates: () => call("rd:update:check"),
   openDownloads: () => call("rd:update:open"),
 });

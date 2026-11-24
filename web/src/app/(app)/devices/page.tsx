@@ -10,6 +10,7 @@ import { Ipv6Notice } from "@/components/ipv6-notice";
 import { DeviceIcon } from "@/components/device-icon";
 import { Badge, Button, Card, ConfirmDialog, CopyButton, cn, Dialog, EmptyState, Field, Input, Notice, Segmented, Skeleton } from "@/components/ui";
 import { bandLabel, displayName, guessKind, isRandomizedMac, SIGNAL_LABEL, signalQuality, type SignalQuality } from "@/lib/devices";
+import { useAdvanced } from "@/lib/preferences";
 import { qk, useDevices, useLocalIp, useNicknames, useRouterAction } from "@/lib/queries";
 import type { Band, Device } from "@/lib/router/types";
 import { normalizeMac } from "@/lib/router/util";
@@ -46,6 +47,7 @@ function DeviceRow({
   const [open, setOpen] = useState(false);
   const name = displayName(d, names[d.mac]);
   const q = d.online ? signalQuality(d.signal) : undefined;
+  const advanced = useAdvanced();
   const SignalIcon = q ? SIGNAL_ICON[q] : Wifi;
   return (
     <li className={cn("rounded-xl transition", open && "bg-[var(--surface-2)]")}>
@@ -82,7 +84,7 @@ function DeviceRow({
                       </span>
                     ))}
                   {d.medium === "wifi" && q && <span className={cn("hidden sm:inline", SIGNAL_TONE[q])}> · {SIGNAL_LABEL[q]}</span>}
-                  {d.medium === "wifi" && d.linkMbps ? <span className="hidden sm:inline"> · {Math.round(d.linkMbps)} Mbps</span> : null}
+                  {advanced && d.medium === "wifi" && d.linkMbps ? <span className="hidden sm:inline"> · {Math.round(d.linkMbps)} Mbps</span> : null}
                 </>
               ) : (
                 "Not connected now"
@@ -130,11 +132,11 @@ function DeviceRow({
               <div className="flex items-center justify-between gap-2 sm:block">
                 <dt className="text-muted">Signal</dt>
                 <dd>
-                  {q ? SIGNAL_LABEL[q].replace(" signal", "") : "—"} <span className="font-mono text-muted">({d.signal} dBm)</span>
+                  {q ? SIGNAL_LABEL[q].replace(" signal", "") : "—"} {advanced && <span className="font-mono text-muted">({d.signal} dBm)</span>}
                 </dd>
               </div>
             )}
-            {d.online && d.linkMbps !== undefined && (
+            {advanced && d.online && d.linkMbps !== undefined && (
               <div className="flex items-center justify-between gap-2 sm:block">
                 <dt className="text-muted">Link speed</dt>
                 <dd className="font-mono">{d.linkMbps} Mbps</dd>
@@ -146,7 +148,7 @@ function DeviceRow({
                 <dd>{d.hostname}</dd>
               </div>
             )}
-            {d.ipv6 && (
+            {advanced && d.ipv6 && (
               <div className="flex items-center justify-between gap-2 sm:block">
                 <dt className="text-muted">IPv6</dt>
                 <dd className="truncate font-mono text-[12px]">{d.ipv6}</dd>
