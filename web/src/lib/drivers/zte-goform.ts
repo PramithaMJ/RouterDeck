@@ -447,8 +447,10 @@ class ZteGoformDriver implements RouterDriver {
     const raw = str(encode ? r.m_WPAPSK1_encode : r.m_WPAPSK1);
     return {
       r,
-      // tz_ssid2_enable is what the router actually broadcasts; m_ssid_enable is a stored flag.
-      enabled: str(r.tz_ssid2_enable) === "1",
+      // Two switches must both be on for the second network to broadcast:
+      // m_ssid_enable (the "multi-SSID" feature) and tz_ssid2_enable (SSID2 itself).
+      enabled: str(r.tz_ssid2_enable) === "1" && str(r.m_ssid_enable) === "1",
+      switchOn: str(r.tz_ssid2_enable) === "1",
       ssid: str(r.m_SSID),
       password: raw ? (encode ? unb64(raw) : raw) : "",
       isolated: str(r.m_NoForwarding) === "1",
@@ -486,11 +488,11 @@ class ZteGoformDriver implements RouterDriver {
     return this.lock.run(async () => {
       const cur = await this.readGuest();
       if (!cfg.enabled) {
-        if (!cur.enabled) return;
+        if (!cur.enabled && !cur.switchOn) return;
         // Same request as the router's own page: wifiEnabled with wifiOrder=1
         // switches the second network (SSID2), not the main Wi-Fi.
         await this.action("SET_WIFI_INFO2", { wifiEnabled: "0", wifiOrder: "1" });
-        if (!(await wait((g) => !g.enabled))) throw new RouterError("The router didn't turn the guest network off. Try again.", "rejected");
+        if (!(await wait((g) => !g.switchOn))) throw new RouterError("The router didn't turn the guest network off. Try again.", "rejected");
         return;
       }
       const ssid = cfg.ssid!.trim();
@@ -509,7 +511,12 @@ class ZteGoformDriver implements RouterDriver {
           m_WPAPSK1: await this.enc(cfg.password!),
         });
       }
-      if (!cur.enabled) await this.action("SET_WIFI_INFO2", { m_ssid_enable: "1", wifiEnabled: "1", wifiOrder: "1" });
+      if (!cur.enabled) {
+        // Multi-SSID feature on (main Wi-Fi stays on: wifiEnabled=1)…
+        if (str(cur.r.m_ssid_enable) !== "1") await this.action("SET_WIFI_INFO", { m_ssid_enable: "1", wifiEnabled: "1" });
+        // …and the second network itself.
+        if (!cur.switchOn) await this.action("SET_WIFI_INFO2", { m_ssid_enable: "1", wifiEnabled: "1", wifiOrder: "1" });
+      }
       if (!(await wait((g) => g.enabled && g.ssid === ssid && g.password === cfg.password)))
         throw new RouterError("The router didn't apply the guest network. Try again in a minute.", "rejected");
     });
