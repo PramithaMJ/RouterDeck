@@ -67,6 +67,10 @@ export interface Device {
   band?: Band;
   online: boolean;
   blocked: boolean;
+  /** Wi-Fi signal strength at the router, in dBm (e.g. -55). */
+  signal?: number;
+  /** Current Wi-Fi link speed, Mbit/s. */
+  linkMbps?: number;
 }
 
 export interface WifiNetwork {

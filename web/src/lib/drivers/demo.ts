@@ -20,13 +20,13 @@ interface DemoState {
 }
 
 const DEVICES: Omit<Device, "blocked">[] = [
-  { mac: "3a:61:c2:0e:9b:14", hostname: "Galaxy-Note10", ipv4: "192.168.1.5", medium: "wifi", band: "5GHz", online: true },
-  { mac: "3c:22:fb:91:0e:17", hostname: "MacBook-Pro", ipv4: "192.168.1.8", medium: "wifi", band: "5GHz", online: true },
-  { mac: "b6:2d:51:aa:03:7e", ipv4: "192.168.1.2", medium: "wifi", band: "2.4GHz", online: true },
+  { mac: "3a:61:c2:0e:9b:14", hostname: "Galaxy-Note10", ipv4: "192.168.1.5", medium: "wifi", band: "5GHz", signal: -52, linkMbps: 866, online: true },
+  { mac: "3c:22:fb:91:0e:17", hostname: "MacBook-Pro", ipv4: "192.168.1.8", medium: "wifi", band: "5GHz", signal: -61, linkMbps: 585, online: true },
+  { mac: "b6:2d:51:aa:03:7e", ipv4: "192.168.1.2", medium: "wifi", band: "2.4GHz", signal: -78, linkMbps: 39, online: true },
   { mac: "f4:f5:d8:22:aa:31", hostname: "Living-Room-TV", ipv4: "192.168.1.11", medium: "wired", online: true },
   { mac: "b8:27:eb:5c:10:02", hostname: "raspberrypi", ipv4: "192.168.1.20", medium: "wired", online: true },
-  { mac: "d2:41:0c:7e:33:9a", hostname: "iPhone", ipv4: "192.168.1.14", medium: "wifi", band: "5GHz", online: true },
-  { mac: "50:ec:50:11:2b:c4", hostname: "DESKTOP-7Q2LK3M", ipv4: "192.168.1.9", medium: "wifi", band: "2.4GHz", online: true },
+  { mac: "d2:41:0c:7e:33:9a", hostname: "iPhone", ipv4: "192.168.1.14", medium: "wifi", band: "5GHz", signal: -67, linkMbps: 390, online: true },
+  { mac: "50:ec:50:11:2b:c4", hostname: "DESKTOP-7Q2LK3M", ipv4: "192.168.1.9", medium: "wifi", band: "2.4GHz", signal: -58, linkMbps: 144, online: true },
 ];
 
 function initial(): DemoState {

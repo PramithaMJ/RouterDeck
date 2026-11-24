@@ -29,3 +29,17 @@ export function displayName(d: Device, nickname?: string) {
 }
 
 export { isRandomizedMac };
+
+export type SignalQuality = "excellent" | "good" | "fair" | "weak";
+
+/** RSSI (dBm) → a plain-language quality. */
+export function signalQuality(dbm?: number): SignalQuality | undefined {
+  if (dbm === undefined || !Number.isFinite(dbm) || dbm >= 0) return undefined;
+  return dbm >= -55 ? "excellent" : dbm >= -67 ? "good" : dbm >= -75 ? "fair" : "weak";
+}
+
+export const SIGNAL_LABEL: Record<SignalQuality, string> = { excellent: "Excellent signal", good: "Good signal", fair: "Fair signal", weak: "Weak signal" };
+
+export function bandLabel(b?: string) {
+  return b ? b.replace("GHz", " GHz") : "";
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Cable, Check, Info, MoreHorizontal, Pencil, Plus, RefreshCw, Search, ShieldOff, Smartphone, Wifi } from "lucide-react";
+import { Ban, Cable, Check, Info, MoreHorizontal, Pencil, Plus, RefreshCw, Search, ShieldOff, Smartphone, Wifi, WifiHigh, WifiLow, WifiZero } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { suggestThisDevice, useThisDevice } from "@/lib/this-device";
 import { useSession } from "@/lib/session";
@@ -9,12 +9,20 @@ import { PageHeader } from "@/components/app-shell";
 import { Ipv6Notice } from "@/components/ipv6-notice";
 import { DeviceIcon } from "@/components/device-icon";
 import { Badge, Button, Card, ConfirmDialog, CopyButton, cn, Dialog, EmptyState, Field, Input, Notice, Segmented, Skeleton } from "@/components/ui";
-import { displayName, guessKind, isRandomizedMac } from "@/lib/devices";
+import { bandLabel, displayName, guessKind, isRandomizedMac, SIGNAL_LABEL, signalQuality, type SignalQuality } from "@/lib/devices";
 import { qk, useDevices, useLocalIp, useNicknames, useRouterAction } from "@/lib/queries";
-import type { Device } from "@/lib/router/types";
+import type { Band, Device } from "@/lib/router/types";
 import { normalizeMac } from "@/lib/router/util";
 
 type Filter = "all" | "online" | "blocked";
+type BandFilter = "any" | Band | "wired";
+
+const SIGNAL_ICON: Record<SignalQuality, typeof Wifi> = { excellent: Wifi, good: WifiHigh, fair: WifiLow, weak: WifiZero };
+const SIGNAL_TONE: Record<SignalQuality, string> = { excellent: "", good: "", fair: "text-amber-600 dark:text-amber-400", weak: "text-rose-600 dark:text-rose-400" };
+
+function BandChip({ band }: { band: Band }) {
+  return <span className="shrink-0 rounded-md border border-subtle px-1.5 py-px font-mono text-[11px] font-medium leading-4 text-[var(--text)]">{bandLabel(band)}</span>;
+}
 
 function DeviceRow({
   d,
@@ -37,13 +45,15 @@ function DeviceRow({
   const labels = useAccessLabels();
   const [open, setOpen] = useState(false);
   const name = displayName(d, names[d.mac]);
+  const q = d.online ? signalQuality(d.signal) : undefined;
+  const SignalIcon = q ? SIGNAL_ICON[q] : Wifi;
   return (
     <li className={cn("rounded-xl transition", open && "bg-[var(--surface-2)]")}>
       <div className="flex items-center gap-3 px-2.5 py-3 sm:px-4">
         <DeviceIcon kind={guessKind(d, names[d.mac])} blocked={d.blocked} className="size-10 sm:size-11" />
         <button className="min-w-0 flex-1 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           <div className="flex items-center gap-2">
-            {d.online && !d.blocked && <span className="size-2 shrink-0 rounded-full bg-emerald-500" title="Online now" aria-label="Online" />}
+            {d.online && !d.blocked && <span className="size-2 shrink-0 rounded-full bg-emerald-500" title="Connected now" aria-label="Connected now" />}
             <p className="truncate text-[14.5px] font-medium">{name}</p>
             {isMe && (
               <Badge tone="brand" className="shrink-0">
@@ -58,15 +68,24 @@ function DeviceRow({
           </div>
           <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted">
             {d.blocked && <span className="shrink-0 font-medium text-rose-600 sm:hidden dark:text-rose-400">{labels.blockedBadge} ·</span>}
-            {d.medium === "wifi" ? <Wifi className="size-3.5 shrink-0" /> : d.medium === "wired" ? <Cable className="size-3.5 shrink-0" /> : null}
+            {d.medium === "wifi" ? <SignalIcon className={cn("size-3.5 shrink-0", q && SIGNAL_TONE[q])} aria-label={q ? SIGNAL_LABEL[q] : "Wi-Fi"} /> : d.medium === "wired" ? <Cable className="size-3.5 shrink-0" /> : null}
+            {d.online && d.medium === "wifi" && d.band && <BandChip band={d.band} />}
             <span className="truncate">
               {d.online ? (
                 <>
-                  {d.medium === "wifi" ? `Wi-Fi${d.band ? ` ${d.band}` : ""}` : d.medium === "wired" ? "Cable" : "Connected"}
-                  {d.ipv4 && <span className="font-mono"> · {d.ipv4}</span>}
+                  {[d.medium === "wifi" ? (d.band ? null : "Wi-Fi") : d.medium === "wired" ? "Cable" : d.ipv4 ? null : "Connected", d.ipv4]
+                    .filter(Boolean)
+                    .map((t, i) => (
+                      <span key={i}>
+                        {i > 0 && " · "}
+                        <span className={cn(t === d.ipv4 && "font-mono")}>{t}</span>
+                      </span>
+                    ))}
+                  {d.medium === "wifi" && q && <span className={cn("hidden sm:inline", SIGNAL_TONE[q])}> · {SIGNAL_LABEL[q]}</span>}
+                  {d.medium === "wifi" && d.linkMbps ? <span className="hidden sm:inline"> · {Math.round(d.linkMbps)} Mbps</span> : null}
                 </>
               ) : (
-                "Not connected"
+                "Not connected now"
               )}
             </span>
           </p>
@@ -99,6 +118,26 @@ function DeviceRow({
                 <dd className="flex items-center gap-1 font-mono">
                   {d.ipv4} <CopyButton value={d.ipv4} />
                 </dd>
+              </div>
+            )}
+            {d.online && d.medium === "wifi" && d.band && (
+              <div className="flex items-center justify-between gap-2 sm:block">
+                <dt className="text-muted">Connected to</dt>
+                <dd>Wi-Fi {bandLabel(d.band)}</dd>
+              </div>
+            )}
+            {d.online && d.signal !== undefined && (
+              <div className="flex items-center justify-between gap-2 sm:block">
+                <dt className="text-muted">Signal</dt>
+                <dd>
+                  {q ? SIGNAL_LABEL[q].replace(" signal", "") : "—"} <span className="font-mono text-muted">({d.signal} dBm)</span>
+                </dd>
+              </div>
+            )}
+            {d.online && d.linkMbps !== undefined && (
+              <div className="flex items-center justify-between gap-2 sm:block">
+                <dt className="text-muted">Link speed</dt>
+                <dd className="font-mono">{d.linkMbps} Mbps</dd>
               </div>
             )}
             {d.hostname && (
@@ -138,6 +177,7 @@ export default function DevicesPage() {
   const names = useNicknames((s) => s.names);
   const setName = useNicknames((s) => s.setName);
   const [filter, setFilter] = useState<Filter>("all");
+  const [bandFilter, setBandFilter] = useState<BandFilter>("any");
   const [query, setQuery] = useState("");
   const [confirm, setConfirm] = useState<Device | null>(null);
   const [rename, setRename] = useState<Device | null>(null);
@@ -181,14 +221,26 @@ export default function DevicesPage() {
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (data ?? [])
-      .filter((d) => (filter === "online" ? d.online && !d.blocked : filter === "blocked" ? d.blocked : true))
+      .filter((d) => (filter === "online" ? d.online : filter === "blocked" ? d.blocked : true))
+      .filter((d) => bandFilter === "any" || (bandFilter === "wired" ? d.online && d.medium === "wired" : d.online && d.band === bandFilter))
       .filter((d) => !q || [displayName(d, names[d.mac]), d.hostname, d.ipv4, d.mac].some((s) => s?.toLowerCase().includes(q)))
       .sort((a, b) => Number(b.blocked) - Number(a.blocked) || Number(b.online) - Number(a.online) || displayName(a, names[a.mac]).localeCompare(displayName(b, names[b.mac])));
-  }, [data, filter, query, names]);
+  }, [data, filter, bandFilter, query, names]);
+
+  // "Connected now" breakdown per Wi-Fi band (and cable), shown when there's more than one.
+  const live = (data ?? []).filter((d) => d.online);
+  const groups = (
+    [
+      ["2.4GHz", live.filter((d) => d.band === "2.4GHz").length],
+      ["5GHz", live.filter((d) => d.band === "5GHz").length],
+      ["6GHz", live.filter((d) => d.band === "6GHz").length],
+      ["wired", live.filter((d) => d.medium === "wired").length],
+    ] as [BandFilter, number][]
+  ).filter(([, n]) => n > 0);
 
   const counts = {
     all: data?.length ?? 0,
-    online: data?.filter((d) => d.online && !d.blocked).length ?? 0,
+    online: data?.filter((d) => d.online).length ?? 0,
     blocked: data?.filter((d) => d.blocked).length ?? 0,
   };
 
@@ -215,7 +267,7 @@ export default function DevicesPage() {
           onChange={setFilter}
           options={[
             { value: "all", label: `All ${counts.all || ""}` },
-            { value: "online", label: `Online ${counts.online || ""}` },
+            { value: "online", label: `Connected ${counts.online || ""}` },
             { value: "blocked", label: `${labels.allow ? "Not allowed" : "Blocked"} ${counts.blocked || ""}` },
           ]}
         />
@@ -224,6 +276,34 @@ export default function DevicesPage() {
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, IP or MAC" className="h-10 pl-10 text-sm" />
         </div>
       </div>
+
+      {groups.length > 1 && (
+        <div className="mb-4 flex flex-wrap items-center gap-1.5 text-[13px]" role="group" aria-label="Filter by connection">
+          <span className="mr-1 flex items-center gap-1.5 text-muted">
+            <span className="size-2 rounded-full bg-emerald-500" /> {live.length} connected now
+          </span>
+          {groups.map(([k, n]) => (
+            <button
+              key={k}
+              onClick={() => setBandFilter((cur) => (cur === k ? "any" : k))}
+              aria-pressed={bandFilter === k}
+              className={cn(
+                "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 font-medium transition",
+                bandFilter === k ? "border-[var(--text)] bg-[var(--surface)]" : "border-subtle text-muted hover:text-[var(--text)]",
+              )}
+            >
+              {k === "wired" ? <Cable className="size-3.5" /> : <Wifi className="size-3.5" />}
+              {k === "wired" ? "Cable" : bandLabel(k)}
+              <span className="font-mono text-[12px] text-muted">{n}</span>
+            </button>
+          ))}
+          {bandFilter !== "any" && (
+            <button onClick={() => setBandFilter("any")} className="ml-1 text-[12.5px] text-muted underline underline-offset-2 hover:text-[var(--text)]">
+              Show all
+            </button>
+          )}
+        </div>
+      )}
 
       {error && (
         <Notice tone="red" className="mb-4">

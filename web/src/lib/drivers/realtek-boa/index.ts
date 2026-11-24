@@ -44,8 +44,11 @@ const PAGES = {
   reboot: "/reboot.asp",
   ipv6: "/ipv6_enabledisable.asp",
   multiAp: "/admin/wlmultipleap.asp",
+  wlStations: "/wlstatbl.asp",
   loginCandidates: ["/admin/login.asp", "/login.asp"],
 };
+
+type Station = { band: Band; signal?: number; linkMbps?: number };
 
 const ALREADY_LOGGED_IN = /logined|logout at first|already (logged|login)|another user/i;
 const ERROR_WORDS = /\b(error|fail(ed|ure)?|invalid|incorrect|wrong|not allowed|denied|exceed(ed)?|duplicate|already exist|cannot|can't|illegal)\b/i;
@@ -481,6 +484,12 @@ class RealtekBoaDriver implements RouterDriver {
           blocked: isBlocked(mac),
         });
       }
+      // Live Wi-Fi association tables: who is connected right now, on which band.
+      const stations = await this.readStations().catch(() => new Map<string, Station>());
+      for (const [mac, st] of stations) {
+        const d = devices.get(mac) ?? { mac, medium: "wifi" as const, online: true, blocked: isBlocked(mac) };
+        devices.set(mac, { ...d, medium: "wifi", online: true, band: st.band, signal: st.signal, linkMbps: st.linkMbps });
+      }
       for (const mac of blockedSet)
         if (!devices.has(mac)) devices.set(mac, { mac, medium: "unknown", online: false, blocked: true });
       if (allowlist)
@@ -488,6 +497,37 @@ class RealtekBoaDriver implements RouterDriver {
           if (!devices.has(mac)) devices.set(mac, { mac, medium: "unknown", online: false, blocked: false });
       return [...devices.values()];
     });
+  }
+
+  private radioBands?: { idx: number; band: Band }[];
+
+  /** Which wlan_idx is which band (HG7: 1 = 2.4 GHz, 0 = 5 GHz). Detected once. */
+  private async radios() {
+    if (!this.radioBands?.length) this.radioBands = await this.guestBands();
+    return this.radioBands;
+  }
+
+  /** Wi-Fi clients associated right now, from the per-radio station tables. */
+  private async readStations(): Promise<Map<string, Station>> {
+    const out = new Map<string, Station>();
+    for (const { idx, band } of await this.radios()) {
+      let res = await this.get(`/boaform/formWlanRedirect?redirect-url=${encodeURIComponent(PAGES.wlStations)}&wlan_idx=${idx}`);
+      if (!/RSSI|Tx Rate/i.test(res.body)) res = await this.get(PAGES.wlStations);
+      if (looksLikeLogin(res.body, res.url)) throw new RouterError("Your router session expired. Please sign in again.", "session-expired");
+      const doc = new DOMParser().parseFromString(res.body, "text/html");
+      const rows = [...doc.querySelectorAll("tr")].map((tr) => [...tr.children].map((c) => (c.textContent ?? "").replace(/\s+/g, " ").trim()));
+      const head = rows.find((r) => r.some((c) => /mac address/i.test(c)))?.map((c) => c.toLowerCase()) ?? [];
+      const col = (re: RegExp) => head.findIndex((c) => re.test(c));
+      const [iRate, iRssi] = [col(/rate/), col(/rssi|signal/)];
+      for (const r of rows) {
+        const mac = r.map((c) => normalizeMac(c)).find(Boolean);
+        if (!mac) continue;
+        const num = (i: number) => (i >= 0 ? parseFloat(r[i] ?? "") : NaN);
+        const signal = num(iRssi), rate = num(iRate);
+        out.set(mac, { band, signal: Number.isFinite(signal) ? signal : undefined, linkMbps: Number.isFinite(rate) ? rate : undefined });
+      }
+    }
+    return out;
   }
 
   async setDeviceBlocked(rawMac: string, blocked: boolean): Promise<void> {
