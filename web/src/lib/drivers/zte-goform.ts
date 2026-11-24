@@ -445,7 +445,7 @@ class ZteGoformDriver implements RouterDriver {
 
   private async readGuest() {
     const encode = await this.encodes();
-    const r = await this.readAuthed(["m_ssid_enable", "tz_ssid2_enable", "SSID2", "AuthMode2", "HideSSID2", "MAX_Access_num2", "NoForwarding", encode ? "WPAPSK2_encode" : "WPAPSK2"]);
+    const r = await this.readAuthed(["m_ssid_enable", "tz_ssid2_enable", "SSID2", "AuthMode2", "HideSSID2", "MAX_Access_num2", "MAX_Access_num", "MAX_Station_num", "NoForwarding", encode ? "WPAPSK2_encode" : "WPAPSK2"]);
     const raw = str(encode ? r.WPAPSK2_encode : r.WPAPSK2);
     return {
       r,
@@ -455,6 +455,9 @@ class ZteGoformDriver implements RouterDriver {
       password: raw ? (encode ? unb64(raw) : raw) : "",
       auth: str(r.AuthMode2),
       hidden: str(r.HideSSID2) === "1",
+      maxDevices: num(r.MAX_Access_num2),
+      // All networks share one device cap (MAX_Station_num); the main network keeps its share.
+      limitMax: Math.max(1, (num(r.MAX_Station_num) ?? 32) - (num(r.MAX_Access_num) ?? 16)),
     };
   }
 
@@ -468,6 +471,9 @@ class ZteGoformDriver implements RouterDriver {
         bands: g.enabled ? ["2.4GHz"] : [],
         availableBands: ["2.4GHz"],
         canIsolate: false,
+        maxDevices: g.maxDevices,
+        deviceLimit: { min: 1, max: g.limitMax },
+        networkSlots: 3, // SSID 2, 3 and 4
       };
     });
   }
@@ -497,8 +503,9 @@ class ZteGoformDriver implements RouterDriver {
         return;
       }
       const ssid = cfg.ssid!.trim();
-      if (cur.ssid !== ssid || cur.password !== cfg.password || cur.auth !== "WPA2PSK" || cur.hidden) {
-        const station = num(cur.r.MAX_Access_num2);
+      const wantMax = cfg.maxDevices ? Math.min(Math.max(1, Math.round(cfg.maxDevices)), cur.limitMax) : undefined;
+      if (cur.ssid !== ssid || cur.password !== cfg.password || cur.auth !== "WPA2PSK" || cur.hidden || (wantMax && wantMax !== cur.maxDevices)) {
+        const station = wantMax ?? num(cur.r.MAX_Access_num2);
         await this.action("SET_WIFI_SSID4_SETTINGS", {
           ssid,
           broadcastSsidEnabled: "0", // visible

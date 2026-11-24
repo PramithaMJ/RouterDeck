@@ -837,7 +837,8 @@ class RealtekBoaDriver implements RouterDriver {
           }
         }
       }
-      return { enabled, ssid, password, isolated, bands: onBands, availableBands: bands.map((b) => b.band) };
+      // Slots 3-4 of the router's 4 virtual networks per band are free (1-2 belong to the ISP).
+      return { enabled, ssid, password, isolated, bands: onBands, availableBands: bands.map((b) => b.band), networkSlots: 2 };
     });
   }
 

@@ -56,7 +56,21 @@ const BAND_CHOICES: { key: string; label: string; hint: string; bands: Band[] }[
   { key: "5", label: "5 GHz only", hint: "Faster, shorter range", bands: ["5GHz"] },
 ];
 
-function CreateDialog({ open, onClose, defaultName, availableBands, canIsolate = true }: { open: boolean; onClose: () => void; defaultName: string; availableBands: Band[]; canIsolate?: boolean }) {
+function CreateDialog({
+  open,
+  onClose,
+  defaultName,
+  availableBands,
+  canIsolate = true,
+  deviceLimit,
+}: {
+  open: boolean;
+  onClose: () => void;
+  defaultName: string;
+  availableBands: Band[];
+  canIsolate?: boolean;
+  deviceLimit?: { min: number; max: number };
+}) {
   const host = useSession((s) => s.connection?.host) ?? "";
   const start = useGuestPasses((s) => s.start);
   const [name, setName] = useState(defaultName);
@@ -64,6 +78,10 @@ function CreateDialog({ open, onClose, defaultName, availableBands, canIsolate =
   const [duration, setDuration] = useState<number | null | "midnight">(4 * 3_600_000);
   const [isolated, setIsolated] = useState(true);
   const [bandKey, setBandKey] = useState("both");
+  // Guest device limit (routers that support one): a few sensible choices up to the router's max.
+  const limitChoices = deviceLimit ? [...new Set([2, 4, 8, deviceLimit.max].filter((n) => n >= deviceLimit.min && n <= deviceLimit.max))] : [];
+  const [maxDevices, setMaxDevices] = useState<number | undefined>(undefined);
+  const chosenMax = deviceLimit ? (maxDevices ?? Math.min(8, deviceLimit.max)) : undefined;
   // Which band is the device you're using on? Changing a band briefly
   // restarts its Wi-Fi, so the guest network defaults to the other one.
   const { data: devices } = useDevices();
@@ -79,10 +97,10 @@ function CreateDialog({ open, onClose, defaultName, availableBands, canIsolate =
 
   const bands = dualBand ? BAND_CHOICES.find((c) => c.key === bandKey)!.bands : availableBands;
 
-  const create = useRouterAction<{ ssid: string; password: string; isolated: boolean; bands: Band[]; expiresAt: number | null }>(
+  const create = useRouterAction<{ ssid: string; password: string; isolated: boolean; bands: Band[]; maxDevices?: number; expiresAt: number | null }>(
     async (d, v) => {
-      await d.setGuestWifi!({ enabled: true, ssid: v.ssid, password: v.password, isolated: v.isolated, bands: v.bands.length ? v.bands : undefined });
-      start({ router: host, ssid: v.ssid, password: v.password, bands: v.bands.length ? v.bands : undefined, expiresAt: v.expiresAt });
+      await d.setGuestWifi!({ enabled: true, ssid: v.ssid, password: v.password, isolated: v.isolated, bands: v.bands.length ? v.bands : undefined, maxDevices: v.maxDevices });
+      start({ router: host, ssid: v.ssid, password: v.password, bands: v.bands.length ? v.bands : undefined, maxDevices: v.maxDevices, expiresAt: v.expiresAt });
     },
     { invalidate: [guestKey], pending: "Creating the guest network…", success: "Guest pass ready. Share it below." },
   );
@@ -108,7 +126,7 @@ function CreateDialog({ open, onClose, defaultName, availableBands, canIsolate =
             onClick={async () => {
               const expiresAt = duration === "midnight" ? untilMidnight() : duration === null ? null : Date.now() + duration;
               try {
-                await create.mutateAsync({ ssid: name.trim(), password, isolated, bands, expiresAt });
+                await create.mutateAsync({ ssid: name.trim(), password, isolated, bands, maxDevices: chosenMax, expiresAt });
                 onClose();
               } catch {}
             }}
@@ -172,6 +190,25 @@ function CreateDialog({ open, onClose, defaultName, availableBands, canIsolate =
             </>
           )}
         </p>
+        {deviceLimit && limitChoices.length > 0 && (
+          <div>
+            <p className="mb-2 text-[13px] font-medium">How many guests?</p>
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Maximum guest devices">
+              {limitChoices.map((n) => (
+                <button
+                  key={n}
+                  role="radio"
+                  aria-checked={chosenMax === n}
+                  onClick={() => setMaxDevices(n)}
+                  className={cn("rounded-lg border px-3 py-1.5 text-[13px] font-medium transition", chosenMax === n ? "border-[var(--text)] bg-[var(--surface)]" : "border-subtle text-muted hover:text-[var(--text)]")}
+                >
+                  {n === deviceLimit.max ? `Up to ${n} (max)` : `Up to ${n}`}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[12px] text-muted">Devices on the guest Wi-Fi at the same time. This router allows up to {deviceLimit.max}.</p>
+          </div>
+        )}
         {canIsolate && <div className="flex items-center justify-between gap-4 rounded-lg bg-[var(--surface-2)] px-3.5 py-3">
           <div>
             <p className="text-[13.5px] font-medium">Keep guests separate</p>
@@ -226,15 +263,15 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
   );
   const fix = useRouterAction<GuestPass>(
     async (d, p) => {
-      await d.setGuestWifi!({ enabled: true, ssid: p.ssid, password: p.password, bands: p.bands });
+      await d.setGuestWifi!({ enabled: true, ssid: p.ssid, password: p.password, bands: p.bands, maxDevices: p.maxDevices });
     },
     { invalidate: [guestKey], pending: "Applying the pass on the router…", success: "Fixed. The guest network matches this pass again." },
   );
   const rotate = useRouterAction<GuestPass>(
     async (d, p) => {
       const password = guestPassword();
-      await d.setGuestWifi!({ enabled: true, ssid: p.ssid, password, bands: p.bands });
-      start({ router: host, ssid: p.ssid, password, bands: p.bands, expiresAt: p.expiresAt });
+      await d.setGuestWifi!({ enabled: true, ssid: p.ssid, password, bands: p.bands, maxDevices: p.maxDevices });
+      start({ router: host, ssid: p.ssid, password, bands: p.bands, maxDevices: p.maxDevices, expiresAt: p.expiresAt });
     },
     { invalidate: [guestKey], pending: "Changing the guest password…", success: "New guest password set. Old one no longer works." },
   );
@@ -276,7 +313,18 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
           </div>
         }
         title="Guest passes"
-        description="Share Wi-Fi with visitors using a temporary password you can revoke any time."
+        description={
+          <>
+            Share Wi-Fi with visitors using a temporary password you can revoke any time.
+            {guest?.networkSlots ? (
+              <span className="mt-1 block text-[12px]">
+                This router can run {guest.networkSlots} guest {guest.networkSlots === 1 ? "network" : "networks"}
+                {guest.availableBands && guest.availableBands.length > 1 ? " per band" : ""}; RouterDeck uses one at a time
+                {guest.deviceLimit ? `, for up to ${guest.deviceLimit.max} devices` : ""}.
+              </span>
+            ) : null}
+          </>
+        }
         action={active ? <Badge tone="green">Active</Badge> : guest?.enabled ? <Badge tone="amber">Guest Wi-Fi on</Badge> : undefined}
       />
 
@@ -299,7 +347,10 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
               <div className="rounded-lg bg-[var(--surface-2)] p-3.5">
                 <p className="label-caps">Network</p>
                 <p className="mt-1 truncate font-medium">{active.ssid}</p>
-                <p className="mt-0.5 text-[12px] text-muted">{bandsLabel(active.bands, guest?.availableBands)}</p>
+                <p className="mt-0.5 text-[12px] text-muted">
+                  {bandsLabel(active.bands, guest?.availableBands)}
+                  {(active.maxDevices ?? guest?.maxDevices) ? ` · up to ${active.maxDevices ?? guest?.maxDevices} devices` : ""}
+                </p>
               </div>
               <div className="rounded-lg bg-[var(--surface-2)] p-3.5">
                 <p className="label-caps">Password</p>
@@ -401,7 +452,7 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
         )}
       </div>
 
-      <CreateDialog open={creating} onClose={() => setCreating(false)} defaultName={defaultName} availableBands={guest?.availableBands ?? []} canIsolate={guest?.canIsolate !== false} />
+      <CreateDialog open={creating} onClose={() => setCreating(false)} defaultName={defaultName} availableBands={guest?.availableBands ?? []} canIsolate={guest?.canIsolate !== false} deviceLimit={guest?.deviceLimit} />
     </Card>
   );
 }

@@ -190,14 +190,14 @@ class DemoDriver implements RouterDriver {
 
   async getGuestWifi(): Promise<GuestWifi> {
     await this.lag(400);
-    return { ...(this.s.guest ?? { enabled: false, bands: [] }), availableBands: ["2.4GHz", "5GHz"] };
+    return { maxDevices: 8, ...(this.s.guest ?? { enabled: false, bands: [] }), availableBands: ["2.4GHz", "5GHz"], deviceLimit: { min: 1, max: 16 }, networkSlots: 2 };
   }
 
   async setGuestWifi(cfg: GuestWifiConfig) {
     await this.lag(1400);
     if (cfg.enabled && (!cfg.password || cfg.password.length < 8)) throw new RouterError("Guest password must be at least 8 characters.", "validation");
     this.s.guest = cfg.enabled
-      ? { enabled: true, ssid: cfg.ssid ?? this.s.guest?.ssid, password: cfg.password, isolated: cfg.isolated ?? true, bands: cfg.bands?.length ? cfg.bands : ["2.4GHz", "5GHz"] }
+      ? { enabled: true, ssid: cfg.ssid ?? this.s.guest?.ssid, password: cfg.password, isolated: cfg.isolated ?? true, bands: cfg.bands?.length ? cfg.bands : ["2.4GHz", "5GHz"], maxDevices: cfg.maxDevices ?? 8 }
       : { ...(this.s.guest ?? { bands: [] }), enabled: false, bands: [] };
     this.save();
   }

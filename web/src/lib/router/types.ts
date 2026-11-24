@@ -119,6 +119,12 @@ export interface GuestWifi {
   isolated?: boolean;
   /** false when the router has no separate guest isolation setting. */
   canIsolate?: boolean;
+  /** How many devices may be on the guest network at once (current setting). */
+  maxDevices?: number;
+  /** Range the router allows for maxDevices (shared with the main network on some routers). */
+  deviceLimit?: { min: number; max: number };
+  /** How many extra (guest) Wi-Fi networks this router can broadcast. RouterDeck uses one. */
+  networkSlots?: number;
 }
 
 export interface GuestWifiConfig {
@@ -128,6 +134,8 @@ export interface GuestWifiConfig {
   isolated?: boolean;
   /** Which bands to broadcast on. Omitted = every band the router has. */
   bands?: Band[];
+  /** Device limit for the guest network (routers that support it). */
+  maxDevices?: number;
 }
 
 export interface BlockedSite {

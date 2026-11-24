@@ -16,6 +16,8 @@ export interface GuestPass {
   password: string;
   /** Bands it broadcasts on; missing = all bands (older passes). */
   bands?: Band[];
+  /** Device limit set for this pass, if the router supports one. */
+  maxDevices?: number;
   createdAt: number;
   /** null = no automatic expiry */
   expiresAt: number | null;
