@@ -15,12 +15,12 @@ const FIRST_RUN: Record<ConnectApp, React.ReactNode> = {
   ),
   macArm: (
     <>
-      Open the .dmg and drag RouterDeck into Applications. The first time, macOS may say it can&apos;t check the app: open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>. On older macOS, right-click the app → <b>Open</b>.
+      Open the .dmg and drag RouterDeck into Applications. If macOS says &quot;Not Opened&quot;, click Done, then <b>System Settings → Privacy &amp; Security → Open Anyway</b>. Or use the one-command install above.
     </>
   ),
   macIntel: (
     <>
-      Open the .dmg and drag RouterDeck into Applications. The first time, macOS may say it can&apos;t check the app: open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>. On older macOS, right-click the app → <b>Open</b>.
+      Open the .dmg and drag RouterDeck into Applications. If macOS says &quot;Not Opened&quot;, click Done, then <b>System Settings → Privacy &amp; Security → Open Anyway</b>. Or use the one-command install above.
     </>
   ),
   linux: (

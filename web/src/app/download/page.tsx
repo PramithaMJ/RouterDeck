@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Logo } from "@/components/brand";
 import { BuiltByFooter } from "@/components/built-by";
 import { DownloadPicker } from "@/components/download-picker";
+import { InstallCommand } from "@/components/install-command";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata: Metadata = {
@@ -35,7 +36,27 @@ export default function DownloadPage() {
         <h1 className="mt-3 max-w-2xl text-[2.4rem] font-semibold leading-[1.08] tracking-[-0.035em] sm:text-[2.8rem]">RouterDeck, installed on your computer.</h1>
         <p className="mt-4 max-w-xl text-[16px] leading-relaxed text-muted">The same RouterDeck as the website, as a proper app. It updates itself from GitHub releases and never sends anything outside your home network.</p>
 
-        <div className="mt-8">
+        <InstallCommand className="mt-8" />
+
+        <section className="mt-6 rounded-[14px] border border-subtle p-4 text-[13.5px] leading-relaxed sm:p-5">
+          <p className="font-semibold">Downloaded the file and see &quot;Not Opened&quot; or &quot;Windows protected your PC&quot;?</p>
+          <p className="mt-1 text-muted">
+            That&apos;s because RouterDeck isn&apos;t signed with a paid Apple / Microsoft certificate yet, not because anything is wrong with it. The command above avoids it. Or:
+          </p>
+          <ul className="mt-2 space-y-1.5 text-muted">
+            <li>
+              <b className="text-[var(--text)]">Mac:</b> click <b>Done</b>, then open <b>System Settings → Privacy &amp; Security</b>, scroll down to &quot;RouterDeck was blocked&quot; and click <b>Open Anyway</b>. Or in Terminal:{" "}
+              <code className="rounded bg-[var(--surface-2)] px-1 font-mono text-[12px]">xattr -dr com.apple.quarantine /Applications/RouterDeck.app</code>
+            </li>
+            <li>
+              <b className="text-[var(--text)]">Windows:</b> click <b>More info</b>, then <b>Run anyway</b>.
+            </li>
+          </ul>
+          <p className="mt-2 text-muted">You only do this once. Updates install inside the app without it.</p>
+        </section>
+
+        <div className="mt-10">
+          <p className="label-caps mb-4">Or download the installer</p>
           <DownloadPicker />
         </div>
 

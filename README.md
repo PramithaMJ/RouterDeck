@@ -72,7 +72,18 @@ See [SECURITY.md](SECURITY.md) for the full security model.
 
 **Desktop app (easiest on a computer)**
 
-Download from **<https://router.pramitha.lk/download>** or [GitHub Releases](https://github.com/PramithaMJ/RouterDeck/releases/latest):
+Install with one command (no "unverified app" warning; the script checks the release checksum first):
+
+```bash
+# macOS / Linux
+curl -fsSL https://router.pramitha.lk/install.sh | bash
+```
+```powershell
+# Windows (PowerShell)
+irm https://router.pramitha.lk/install.ps1 | iex
+```
+
+Or download from **<https://router.pramitha.lk/download>** or [GitHub Releases](https://github.com/PramithaMJ/RouterDeck/releases/latest):
 
 | System | File |
 | --- | --- |

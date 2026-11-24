@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { DESKTOP_APPS, detectPlatform, RELEASES_PAGE, type ConnectApp } from "@/lib/downloads";
+import { InstallCommand } from "./install-command";
 
 export const DESKTOP_VERSION = process.env.NEXT_PUBLIC_DESKTOP_VERSION || "";
 
@@ -171,8 +172,12 @@ export function DesktopAppSection() {
                 </tbody>
               </table>
             </div>
+            <InstallCommand className="mt-8" />
             <p className="mt-3 text-[12.5px] leading-relaxed text-muted">
-              First launch only: Windows may show &quot;Windows protected your PC&quot; (click More info → Run anyway). macOS may ask in System Settings → Privacy &amp; Security → Open Anyway. That&apos;s because the app isn&apos;t signed with a paid certificate yet.
+              Downloaded the installer instead? The first time, Windows may show &quot;Windows protected your PC&quot; (More info → Run anyway) and macOS &quot;Not Opened&quot; (System Settings → Privacy &amp; Security → Open Anyway), because the app isn&apos;t signed with a paid certificate yet.{" "}
+              <Link href="/download/" className="underline underline-offset-2 hover:text-[var(--text)]">
+                Step-by-step help
+              </Link>
             </p>
           </div>
         </div>

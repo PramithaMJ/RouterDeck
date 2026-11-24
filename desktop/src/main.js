@@ -313,6 +313,8 @@ function applySettings(patch) {
 
 // ---------------------------------------------------------------- updates
 // The app checks GitHub releases and shows an "Update" banner inside the app.
+// macOS builds without Developer ID swap their own bundle (macSwap) so updates
+// never hit Gatekeeper; signed builds use electron-updater (Squirrel.Mac).
 //  - Windows (NSIS) and Linux AppImage update in place: download (automatic if
 //    "Install updates automatically" is on), then "Restart to update".
 //  - macOS needs Developer ID signing to update in place (Squirrel.Mac checks
@@ -324,7 +326,10 @@ let pkgMeta = {};
 try {
   pkgMeta = require("../package.json");
 } catch {}
-const selfUpdates = process.platform === "win32" || (process.platform === "linux" && !!process.env.APPIMAGE) || (process.platform === "darwin" && pkgMeta.routerdeckSignedMac === true);
+const macSigned = process.platform === "darwin" && pkgMeta.routerdeckSignedMac === true;
+/** Unsigned macOS builds update by swapping the .app bundle themselves (see macSwap*). */
+const macSwap = process.platform === "darwin" && !macSigned;
+const selfUpdates = process.platform === "win32" || (process.platform === "linux" && !!process.env.APPIMAGE) || process.platform === "darwin";
 
 /** status: idle | checking | latest | available | downloading | ready | error */
 let update = { status: "idle", current: app.getVersion(), inPlace: selfUpdates };
@@ -364,8 +369,68 @@ async function checkForUpdates(interactive) {
   return update;
 }
 
+// ---- macOS without Developer ID: download the release .zip with Node (files
+// the app writes itself carry no quarantine flag), check its SHA-512 against
+// latest-mac.yml, unpack it, and on restart swap the .app bundle in place.
+let macStaged = null; // path to the new RouterDeck.app
+function currentBundle() {
+  const m = app.getPath("exe").match(/^(.*?\.app)\//);
+  return m ? m[1] : null;
+}
+async function macSwapDownload() {
+  const arch = process.arch === "arm64" ? "arm64" : "x64";
+  const name = `RouterDeck-macOS-${arch}.zip`;
+  const yml = await (await fetch(`${ASSET_BASE}/latest-mac.yml`)).text();
+  const block = yml.split(/\n(?=\s*-\s*url:)/).find((b) => b.includes(name)) || "";
+  const sha512 = (block.match(/sha512:\s*(\S+)/) || [])[1];
+  if (!sha512) throw new Error("No checksum for " + name);
+  const res = await fetch(`${ASSET_BASE}/${name}`);
+  if (!res.ok || !res.body) throw new Error("Download failed: " + res.status);
+  const total = Number(res.headers.get("content-length")) || 0;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "routerdeck-update-"));
+  const zip = path.join(dir, name);
+  const hash = require("node:crypto").createHash("sha512");
+  const out = fs.createWriteStream(zip);
+  let got = 0, last = -1;
+  for await (const chunk of res.body) {
+    hash.update(chunk);
+    out.write(chunk);
+    got += chunk.length;
+    const pct = total ? Math.floor((got / total) * 100) : 0;
+    if (pct !== last) setUpdate({ status: "downloading", percent: (last = pct) });
+  }
+  await new Promise((r) => out.end(r));
+  if (hash.digest("base64") !== sha512) throw new Error("Checksum mismatch");
+  await new Promise((resolve, reject) => {
+    const p = spawn("/usr/bin/ditto", ["-x", "-k", zip, path.join(dir, "app")]);
+    p.on("exit", (c) => (c === 0 ? resolve() : reject(new Error("unzip failed"))));
+  });
+  macStaged = path.join(dir, "app", "RouterDeck.app");
+  if (!fs.existsSync(macStaged)) throw new Error("Update package is missing RouterDeck.app");
+}
+function macSwapInstall() {
+  const target = currentBundle();
+  if (!macStaged || !target) return false;
+  // A tiny helper waits for this process to exit, swaps the bundle, relaunches.
+  const script = `while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done
+rm -rf "${target}.old" && mv "${target}" "${target}.old" && /usr/bin/ditto "${macStaged}" "${target}" && rm -rf "${target}.old" || { rm -rf "${target}"; mv "${target}.old" "${target}"; }
+/usr/bin/xattr -dr com.apple.quarantine "${target}" 2>/dev/null
+/usr/bin/open "${target}"`;
+  spawn("/bin/sh", ["-c", script], { detached: true, stdio: "ignore" }).unref();
+  quitting = true;
+  app.quit();
+  return true;
+}
+
 async function downloadUpdate() {
   if (!autoUpdater || update.status === "downloading" || update.status === "ready") return update;
+  if (macSwap) {
+    setUpdate({ status: "downloading", percent: 0 });
+    macSwapDownload()
+      .then(() => setUpdate({ status: "ready", percent: 100 }))
+      .catch(() => setUpdate({ status: "error" }));
+    return update;
+  }
   if (selfUpdates) {
     setUpdate({ status: "downloading", percent: 0 });
     autoUpdater.downloadUpdate().catch(() => setUpdate({ status: "error" }));
@@ -380,7 +445,9 @@ async function downloadUpdate() {
 
 function installUpdate() {
   if (update.status !== "ready") return update;
-  if (selfUpdates) {
+  if (macSwap) {
+    if (!macSwapInstall()) void shell.openExternal(RELEASES_URL);
+  } else if (selfUpdates) {
     quitting = true;
     setImmediate(() => autoUpdater.quitAndInstall(false, true));
   } else if (update.file) {
@@ -392,7 +459,7 @@ function installUpdate() {
 function initUpdates() {
   if (!autoUpdater || !app.isPackaged) return;
   autoUpdater.autoDownload = false; // we start downloads ourselves (auto or on click)
-  autoUpdater.autoInstallOnAppQuit = selfUpdates;
+  autoUpdater.autoInstallOnAppQuit = selfUpdates && !macSwap;
   autoUpdater.on("download-progress", (p) => setUpdate({ status: "downloading", percent: Math.round(p.percent || 0) }));
   autoUpdater.on("update-downloaded", (info) => setUpdate({ status: "ready", version: info?.version ?? update.version, percent: 100 }));
   autoUpdater.on("error", () => {
