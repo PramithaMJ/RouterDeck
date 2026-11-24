@@ -117,6 +117,8 @@ export interface GuestWifi {
   availableBands?: Band[];
   /** Guests can't reach each other (and, on most routers, your devices). */
   isolated?: boolean;
+  /** false when the router has no separate guest isolation setting. */
+  canIsolate?: boolean;
 }
 
 export interface GuestWifiConfig {

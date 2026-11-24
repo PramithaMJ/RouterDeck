@@ -420,40 +420,41 @@ class ZteGoformDriver implements RouterDriver {
         passphrase: await this.enc(password),
       };
       const station = str(cur.r.MAX_Access_num) || "32";
-      // This firmware family saves the main network through SSID1 on most
-      // builds and SSID4 on some: try each, then confirm it really changed.
-      const attempts: [string, Record<string, string>][] = [
-        ["SET_WIFI_SSID1_SETTINGS", { ...common, MAX_Access_num: station }],
-        ["SET_WIFI_SSID4_SETTINGS", { ...common, MAX_Access_num2: station }],
-      ];
-      for (const [goformId, params] of attempts) {
-        await this.action(goformId, params).catch(() => undefined);
-        // Saving restarts the radio; give it time, then confirm it took.
-        for (let i = 0; i < 6; i++) {
-          await new Promise((r) => setTimeout(r, 2500));
-          const after = await this.readWifi().catch(() => null);
-          if (after && after.ssid === ssid && (patch.password === undefined || after.password === password)) return;
-        }
+      // The main network is saved with SET_WIFI_SSID1_SETTINGS. (SSID4_SETTINGS is
+      // the *second* network on this firmware, so never fall back to it.)
+      await this.action("SET_WIFI_SSID1_SETTINGS", { ...common, MAX_Access_num: station });
+      // Saving restarts the radio; give it time, then confirm it took.
+      for (let i = 0; i < 8; i++) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const after = await this.readWifi().catch(() => null);
+        if (after && after.ssid === ssid && (patch.password === undefined || after.password === password)) return;
       }
       throw new RouterError("The router didn't apply the new Wi-Fi settings. Try again, or change them on the router's own page.", "rejected");
     });
   }
 
-  // ---------------------------------------------------------------- guest Wi-Fi (second network, "SSID2")
+  // ---------------------------------------------------------------- guest Wi-Fi (second network)
+  //
+  // The second network the radio broadcasts is stored in the SSID2 / AuthMode2 /
+  // WPAPSK2 / MAX_Access_num2 fields and saved with SET_WIFI_SSID4_SETTINGS
+  // (that's what the router's own "SSID 2" page sends). SET_WIFI_SSID2_SETTINGS
+  // writes a separate m_SSID set that the radio doesn't use. Two switches must
+  // be on: m_ssid_enable (multi-SSID) and tz_ssid2_enable (this network).
+  // There's no separate guest isolation: NoForwarding is shared with the main
+  // network, so it's left as it is.
 
   private async readGuest() {
     const encode = await this.encodes();
-    const r = await this.readAuthed(["m_ssid_enable", "tz_ssid2_enable", "m_SSID", "m_AuthMode", "m_NoForwarding", "m_MAX_Access_num", encode ? "m_WPAPSK1_encode" : "m_WPAPSK1"]);
-    const raw = str(encode ? r.m_WPAPSK1_encode : r.m_WPAPSK1);
+    const r = await this.readAuthed(["m_ssid_enable", "tz_ssid2_enable", "SSID2", "AuthMode2", "HideSSID2", "MAX_Access_num2", "NoForwarding", encode ? "WPAPSK2_encode" : "WPAPSK2"]);
+    const raw = str(encode ? r.WPAPSK2_encode : r.WPAPSK2);
     return {
       r,
-      // Two switches must both be on for the second network to broadcast:
-      // m_ssid_enable (the "multi-SSID" feature) and tz_ssid2_enable (SSID2 itself).
       enabled: str(r.tz_ssid2_enable) === "1" && str(r.m_ssid_enable) === "1",
       switchOn: str(r.tz_ssid2_enable) === "1",
-      ssid: str(r.m_SSID),
+      ssid: str(r.SSID2),
       password: raw ? (encode ? unb64(raw) : raw) : "",
-      isolated: str(r.m_NoForwarding) === "1",
+      auth: str(r.AuthMode2),
+      hidden: str(r.HideSSID2) === "1",
     };
   }
 
@@ -464,9 +465,9 @@ class ZteGoformDriver implements RouterDriver {
         enabled: g.enabled,
         ssid: g.ssid || undefined,
         password: g.password || undefined,
-        isolated: g.isolated,
         bands: g.enabled ? ["2.4GHz"] : [],
         availableBands: ["2.4GHz"],
+        canIsolate: false,
       };
     });
   }
@@ -488,35 +489,30 @@ class ZteGoformDriver implements RouterDriver {
     return this.lock.run(async () => {
       const cur = await this.readGuest();
       if (!cfg.enabled) {
-        if (!cur.enabled && !cur.switchOn) return;
+        if (!cur.switchOn) return;
         // Same request as the router's own page: wifiEnabled with wifiOrder=1
-        // switches the second network (SSID2), not the main Wi-Fi.
+        // switches the second network, not the main Wi-Fi.
         await this.action("SET_WIFI_INFO2", { wifiEnabled: "0", wifiOrder: "1" });
         if (!(await wait((g) => !g.switchOn))) throw new RouterError("The router didn't turn the guest network off. Try again.", "rejected");
         return;
       }
       const ssid = cfg.ssid!.trim();
-      const isolated = cfg.isolated !== false;
-      if (cur.ssid !== ssid || cur.password !== cfg.password || cur.isolated !== isolated || str(cur.r.m_AuthMode) !== "WPA2PSK") {
-        const station = num(cur.r.m_MAX_Access_num);
-        await this.action("SET_WIFI_SSID2_SETTINGS", {
-          m_SSID: ssid,
-          m_HideSSID: "0", // broadcast the name
-          m_MAX_Access_num: station && station > 0 ? String(station) : "8",
-          m_AuthMode: "WPA2PSK", // WPA2-AES: works on every phone, including iPhones
+      if (cur.ssid !== ssid || cur.password !== cfg.password || cur.auth !== "WPA2PSK" || cur.hidden) {
+        const station = num(cur.r.MAX_Access_num2);
+        await this.action("SET_WIFI_SSID4_SETTINGS", {
+          ssid,
+          broadcastSsidEnabled: "0", // visible
+          MAX_Access_num2: station && station > 0 ? String(station) : "8",
+          security_mode: "WPA2PSK", // WPA2-AES: works on every phone, including iPhones
           cipher: "1",
-          m_EncrypType: "1",
-          m_NoForwarding: isolated ? "1" : "0",
-          m_show_qrcode_flag: "0",
-          m_WPAPSK1: await this.enc(cfg.password!),
+          security_shared_mode: "1",
+          NoForwarding: str(cur.r.NoForwarding) === "1" ? "1" : "0", // shared with the main network: unchanged
+          show_qrcode_flag: "0",
+          passphrase: await this.enc(cfg.password!),
         });
       }
-      if (!cur.enabled) {
-        // Multi-SSID feature on (main Wi-Fi stays on: wifiEnabled=1)…
-        if (str(cur.r.m_ssid_enable) !== "1") await this.action("SET_WIFI_INFO", { m_ssid_enable: "1", wifiEnabled: "1" });
-        // …and the second network itself.
-        if (!cur.switchOn) await this.action("SET_WIFI_INFO2", { m_ssid_enable: "1", wifiEnabled: "1", wifiOrder: "1" });
-      }
+      if (str(cur.r.m_ssid_enable) !== "1") await this.action("SET_WIFI_INFO", { m_ssid_enable: "1", wifiEnabled: "1" }); // main Wi-Fi stays on
+      if (!cur.switchOn) await this.action("SET_WIFI_INFO2", { m_ssid_enable: "1", wifiEnabled: "1", wifiOrder: "1" });
       if (!(await wait((g) => g.enabled && g.ssid === ssid && g.password === cfg.password)))
         throw new RouterError("The router didn't apply the guest network. Try again in a minute.", "rejected");
     });

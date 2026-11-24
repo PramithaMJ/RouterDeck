@@ -56,7 +56,7 @@ const BAND_CHOICES: { key: string; label: string; hint: string; bands: Band[] }[
   { key: "5", label: "5 GHz only", hint: "Faster, shorter range", bands: ["5GHz"] },
 ];
 
-function CreateDialog({ open, onClose, defaultName, availableBands }: { open: boolean; onClose: () => void; defaultName: string; availableBands: Band[] }) {
+function CreateDialog({ open, onClose, defaultName, availableBands, canIsolate = true }: { open: boolean; onClose: () => void; defaultName: string; availableBands: Band[]; canIsolate?: boolean }) {
   const host = useSession((s) => s.connection?.host) ?? "";
   const start = useGuestPasses((s) => s.start);
   const [name, setName] = useState(defaultName);
@@ -172,13 +172,13 @@ function CreateDialog({ open, onClose, defaultName, availableBands }: { open: bo
             </>
           )}
         </p>
-        <div className="flex items-center justify-between gap-4 rounded-lg bg-[var(--surface-2)] px-3.5 py-3">
+        {canIsolate && <div className="flex items-center justify-between gap-4 rounded-lg bg-[var(--surface-2)] px-3.5 py-3">
           <div>
             <p className="text-[13.5px] font-medium">Keep guests separate</p>
             <p className="text-[12.5px] text-muted">Guests can use the internet but not see each other&apos;s devices.</p>
           </div>
           <Switch checked={isolated} onChange={setIsolated} label="Keep guests separate" />
-        </div>
+        </div>}
       </div>
     </Dialog>
   );
@@ -401,7 +401,7 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
         )}
       </div>
 
-      <CreateDialog open={creating} onClose={() => setCreating(false)} defaultName={defaultName} availableBands={guest?.availableBands ?? []} />
+      <CreateDialog open={creating} onClose={() => setCreating(false)} defaultName={defaultName} availableBands={guest?.availableBands ?? []} canIsolate={guest?.canIsolate !== false} />
     </Card>
   );
 }
