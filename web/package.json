@@ -1,0 +1,36 @@
+{
+  "name": "routerdeck-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "preview": "npx --yes serve@14 out",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && npx --yes wrangler@4 pages deploy out --project-name routerdeck",
+    "prebuild": "node scripts/prepare-downloads.mjs",
+    "predev": "node scripts/prepare-downloads.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.108.4",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.79.0",
+    "next": "^16.4.6",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwind-merge": "^3.7.1",
+    "zustand": "^5.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "tailwindcss": "^4.3.5",
+    "typescript": "5.9"
+  }
+}

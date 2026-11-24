@@ -1,0 +1,32 @@
+name: Router support request
+description: Ask for (or help add) support for a router model
+labels: [router-support]
+body:
+  - type: input
+    id: model
+    attributes:
+      label: Router model
+      placeholder: e.g. Huawei EG8145V5, ZTE F670L, TP-Link Archer C6
+    validations:
+      required: true
+  - type: input
+    id: isp
+    attributes:
+      label: Internet provider
+      placeholder: e.g. Dialog Fiber, Mobitel 4G, Starlink
+  - type: input
+    id: address
+    attributes:
+      label: Admin page address
+      placeholder: e.g. http://192.168.8.1
+  - type: textarea
+    id: details
+    attributes:
+      label: Anything else?
+      description: Firmware version, what you'd like to manage, whether you can help test.
+  - type: checkboxes
+    id: test
+    attributes:
+      label: Testing
+      options:
+        - label: I can test a beta driver on this router

@@ -1,0 +1,771 @@
+import { RouterPage, type CapturedSubmit, type PageSnapshot, type SubmitSpec, type TableSnapshot } from "../../runtime/page";
+import { detectIsp } from "../../isp";
+import type {
+  AccessControl,
+  AccessMode,
+  AdvancedGroup,
+  Band,
+  LivePage,
+  Device,
+  DriverContext,
+  DriverFactory,
+  Overview,
+  RouterDriver,
+  SiteBlocking,
+  WanConnection,
+  WifiNetwork,
+  WifiPatch,
+} from "../../router/types";
+import { RouterError } from "../../router/types";
+import { compactMac, encodeForm, Mutex, normalizeMac, parseNumber, parsePercent, sleep } from "../../router/util";
+import { postSecurityFlag } from "./checksum";
+
+/**
+ * Driver for Realtek RTL960x based GPON/XPON ONTs running the "Boa" web
+ * server. Verified on SLT-Mobitel HG7 (fw v1.0.18). Many ISP-branded fiber
+ * routers in Sri Lanka and elsewhere share this firmware family.
+ *
+ * Every change is made by rendering the router's own settings page in a
+ * sandbox, filling the form and capturing the request the page would send.
+ * That keeps the router's own validation, hashing and form signing intact.
+ */
+
+const PAGES = {
+  status: "/status.asp",
+  pon: "/status_pon.asp",
+  macFilter: "/fw-macfilter_rg.asp",
+  wlanBasic: "/wlbasic.asp",
+  wlanSecurity: "/wlwpa.asp",
+  urlBlocking: "/url_blocking.asp",
+  password: "/password.asp",
+  reboot: "/reboot.asp",
+  loginCandidates: ["/admin/login.asp", "/login.asp"],
+};
+
+const ERROR_WORDS = /\b(error|fail(ed|ure)?|invalid|incorrect|wrong|not allowed|denied|exceed(ed)?|duplicate|already exist|cannot|can't|illegal)\b/i;
+
+function looksLikeLogin(body: string, url = "") {
+  return /name=["']?cmlogin|formLogin|<title>\s*login\s*<\/title>/i.test(body) || /\/login\.asp/i.test(url);
+}
+
+/** Like htmlToText but keeps line structure (for diagnostics output). */
+function htmlToLines(html: string) {
+  const marked = html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|tr|li|h\d|pre)>/gi, "\n");
+  const t = new DOMParser().parseFromString(marked, "text/html").body?.textContent ?? "";
+  return t
+    .split("\n")
+    .map((l) => l.replace(/[ \t\u00a0]+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function htmlToText(html: string) {
+  return new DOMParser().parseFromString(html, "text/html").body?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+/** Find a data table by (some of) its header labels. */
+function findTable(snap: PageSnapshot, headers: string[]): { header: string[]; rows: TableSnapshot["rows"] } | null {
+  for (const t of snap.tables) {
+    const hi = t.rows.findIndex((r) => headers.every((h) => r.cells.some((c) => c.toLowerCase() === h.toLowerCase())));
+    if (hi >= 0) return { header: t.rows[hi].cells, rows: t.rows.slice(hi + 1) };
+  }
+  return null;
+}
+
+/** All two-column "Label | value" rows across the page. */
+function keyValues(snap: PageSnapshot): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const t of snap.tables)
+    for (const r of t.rows)
+      if (r.cells.length === 2 && r.cells[0] && !m.has(r.cells[0].toLowerCase().replace(/:$/, "")))
+        m.set(r.cells[0].toLowerCase().replace(/:$/, ""), r.cells[1]);
+  return m;
+}
+
+function field(snap: PageSnapshot, form: string, name: string) {
+  return snap.forms.find((f) => f.name === form)?.fields.filter((x) => x.name === name) ?? [];
+}
+
+function checkedValue(snap: PageSnapshot, form: string, name: string): string | undefined {
+  const els = field(snap, form, name);
+  if (!els.length) return undefined;
+  if (els[0].type === "radio") return els.find((e) => e.checked)?.value;
+  if (els[0].options) return els[0].options.find((o) => o.selected)?.value;
+  return els[0].value;
+}
+
+function selectedLabel(snap: PageSnapshot, form: string, name: string): string | undefined {
+  return field(snap, form, name)[0]?.options?.find((o) => o.selected)?.label;
+}
+
+function rowWithMac(rows: TableSnapshot["rows"], mac: string) {
+  return rows.find((r) => r.cells.some((c) => normalizeMac(c) === mac));
+}
+
+function prettyUptime(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const m = raw.match(/(?:(\d+)\s*days?,?\s*)?(\d{1,2}):(\d{2})(?::(\d{2}))?/i);
+  if (!m) return raw;
+  const d = Number(m[1] ?? 0), h = Number(m[2]), min = Number(m[3]);
+  return [d && `${d}d`, (d || h) && `${h}h`, `${min}m`].filter(Boolean).join(" ");
+}
+
+function wanKind(type: string): WanConnection["kind"] {
+  const t = type.toUpperCase();
+  if (t.includes("INTERNET")) return "internet";
+  if (t.includes("VOICE") || t.includes("VOIP")) return "voice";
+  if (t.includes("IPTV") || t.includes("OTHER")) return t.includes("IPTV") ? "iptv" : "other";
+  return "other";
+}
+
+function securityLabel(raw?: string) {
+  if (!raw) return "Unknown";
+  if (/none/i.test(raw)) return "Open (no password)";
+  if (/wpa\/wpa2|wpa2\/wpa/i.test(raw)) return "WPA/WPA2-Personal";
+  if (/wpa3/i.test(raw)) return raw.replace(/-?PSK/i, "-Personal");
+  if (/wpa2/i.test(raw)) return "WPA2-Personal";
+  if (/wpa/i.test(raw)) return "WPA-Personal";
+  if (/wep/i.test(raw)) return "WEP (insecure)";
+  return raw;
+}
+
+class RealtekBoaDriver implements RouterDriver {
+  readonly id = "realtek-boa";
+  readonly name = "Realtek GPON (Boa)";
+  readonly capabilities = {
+    devices: true,
+    blockDevices: true,
+    wifi: true,
+    siteBlocking: true,
+    adminPassword: true,
+    reboot: true,
+    fiber: true,
+    advanced: true,
+  };
+
+  private readonly lock = new Mutex();
+  private ssidHint: string[] = [];
+  constructor(private readonly ctx: DriverContext) {}
+
+  get baseUrl() {
+    return this.ctx.baseUrl;
+  }
+
+  private url(path: string) {
+    return new URL(path, this.ctx.baseUrl + "/").toString();
+  }
+
+  private async get(path: string) {
+    return this.ctx.transport.request({ url: this.url(path) });
+  }
+
+  /** Render a page in the sandbox, failing fast if the session expired. */
+  private async open(path: string): Promise<RouterPage> {
+    const res = await this.get(path);
+    if (looksLikeLogin(res.body, res.url)) throw new RouterError("Your router session expired. Please sign in again.", "session-expired");
+    if (res.status >= 400) throw new RouterError(`The router answered ${res.status} for ${path}.`, "unknown");
+    return RouterPage.open(this.ctx.transport, this.url(path), { html: res.body });
+  }
+
+  private async read(path: string): Promise<PageSnapshot> {
+    const page = await this.open(path);
+    try {
+      return await page.snapshot();
+    } finally {
+      page.dispose();
+    }
+  }
+
+  /** Send a captured form exactly as the router UI would. */
+  private async send(pageUrl: string, cap: CapturedSubmit, opts: { tolerateDrop?: boolean } = {}) {
+    if (!cap.submitted || !cap.pairs || !cap.action) {
+      const msg = cap.alerts.filter(Boolean).join(" ") || "The router rejected these settings.";
+      throw new RouterError(msg, "validation");
+    }
+    const pairs = cap.pairs.map(([k, v]) => [k, v] as [string, string]);
+    const flag = pairs.find(([k]) => k === "postSecurityFlag");
+    if (flag && !flag[1]) flag[1] = String(postSecurityFlag(pairs));
+    const target = new URL(cap.action, pageUrl).toString();
+    let res;
+    try {
+      res = await this.ctx.transport.request({
+        url: target,
+        method: cap.method === "get" ? "GET" : "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: encodeForm(pairs),
+        timeoutMs: opts.tolerateDrop ? 8000 : 20000,
+      });
+    } catch (e) {
+      if (opts.tolerateDrop) return;
+      throw e;
+    }
+    if (looksLikeLogin(res.body, res.url) && !/formLogin/.test(target)) {
+      throw new RouterError("Your router session expired. Please sign in again.", "session-expired");
+    }
+    const text = htmlToText(res.body);
+    if (text.length < 800 && ERROR_WORDS.test(text) && !/success/i.test(text)) {
+      throw new RouterError(text.replace(/\s*(OK|Back|Close)\s*$/i, "").trim(), "rejected");
+    }
+    return res;
+  }
+
+  /** open → fill → click → send → dispose */
+  private async submit(path: string, spec: SubmitSpec, opts?: { tolerateDrop?: boolean }) {
+    const page = await this.open(path);
+    let cap: CapturedSubmit;
+    try {
+      cap = await page.capture(spec);
+    } finally {
+      page.dispose();
+    }
+    return this.send(page.url, cap, opts);
+  }
+
+  // ---------------------------------------------------------------- session
+
+  async login(username: string, password: string): Promise<void> {
+    return this.lock.run(async () => {
+      let loginPath: string | null = null;
+      const home = await this.get("/");
+      if (looksLikeLogin(home.body, home.url)) loginPath = new URL(home.url).pathname === "/" ? null : new URL(home.url).pathname;
+      if (!loginPath) {
+        for (const p of PAGES.loginCandidates) {
+          const r = await this.get(p).catch(() => null);
+          if (r && r.status < 400 && /cmlogin/i.test(r.body)) {
+            loginPath = p;
+            break;
+          }
+        }
+      }
+      if (!loginPath) {
+        if (!looksLikeLogin(home.body, home.url)) return; // already signed in
+        loginPath = "/";
+      }
+      const page = await RouterPage.open(this.ctx.transport, this.url(loginPath));
+      let cap: CapturedSubmit;
+      try {
+        cap = await page.capture({ form: "cmlogin", button: "save", values: { username, password } });
+      } finally {
+        page.dispose();
+      }
+      if (!cap.submitted) throw new RouterError(cap.alerts.join(" ") || "Enter your username and password.", "validation");
+      const res = await this.send(page.url, cap).catch((e: Error) => {
+        throw new RouterError(e.message || "Sign-in failed.", "auth");
+      });
+      if (!(await this.checkSession())) {
+        const hint = res ? htmlToText(res.body).slice(0, 200) : "";
+        throw new RouterError(
+          /locked|too many|try again later/i.test(hint) ? hint : "Wrong username or password.",
+          "auth",
+        );
+      }
+    });
+  }
+
+  private async checkSession() {
+    try {
+      const r = await this.get(PAGES.status);
+      return r.status < 400 && !looksLikeLogin(r.body, r.url);
+    } catch {
+      return false;
+    }
+  }
+
+  isLoggedIn() {
+    return this.lock.run(() => this.checkSession());
+  }
+
+  async logout(): Promise<void> {
+    await this.lock.run(async () => {
+      try {
+        const home = await this.get("/");
+        if (!looksLikeLogin(home.body, home.url)) {
+          const page = await RouterPage.open(this.ctx.transport, this.url("/"), { html: home.body });
+          const snap = await page.snapshot();
+          const form = snap.forms.find((f) => /formLogout/i.test(f.action));
+          if (form) {
+            const cap = await page.capture({ form: form.index, button: form.fields.find((f) => f.type === "submit")?.name || "save" });
+            page.dispose();
+            await this.send(page.url, cap, { tolerateDrop: true });
+          } else page.dispose();
+        }
+      } finally {
+        await this.ctx.transport.resetSession?.(this.ctx.baseUrl);
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------- status
+
+  async getOverview(): Promise<Overview> {
+    return this.lock.run(async () => {
+      const snap = await this.read(PAGES.status);
+      const kv = keyValues(snap);
+      const wanT = findTable(snap, ["Interface", "Protocol", "Status"]);
+      const wan: WanConnection[] = (wanT?.rows ?? []).map((r) => {
+        const col = (h: string) => r.cells[wanT!.header.findIndex((x) => x.toLowerCase() === h.toLowerCase())] ?? "";
+        const status = col("Status");
+        return {
+          name: col("Interface"),
+          kind: wanKind(col("Connection Type")),
+          protocol: col("Protocol"),
+          ipv4: col("IP Address") || undefined,
+          gateway: col("Gateway") || undefined,
+          vlan: col("VLAN ID") || undefined,
+          up: /^up/i.test(status),
+          uptime: prettyUptime(status.split("/")[0]?.replace(/^up\s*/i, "")),
+        };
+      });
+      const inet = wan.find((w) => w.kind === "internet") ?? wan.find((w) => w.ipv4);
+      const devices = findTable(snap, ["MAC Address", "IPv4 Address"]);
+
+      let fiber: Overview["fiber"];
+      let ponVendor: string | undefined;
+      try {
+        const pon = keyValues(await this.read(PAGES.pon));
+        ponVendor = pon.get("vendor name");
+        fiber = {
+          rxPowerDbm: parseNumber(pon.get("rx power")),
+          txPowerDbm: parseNumber(pon.get("tx power")),
+          temperatureC: parseNumber(pon.get("temperature")),
+          status: pon.get("onu state"),
+        };
+      } catch {
+        fiber = undefined;
+      }
+
+      return {
+        identity: {
+          model: kv.get("device name") || "Realtek GPON router",
+          vendor: "Realtek",
+          isp: detectIsp({ vendor: ponVendor, dns: (kv.get("name servers") ?? "").split(/[,\s]+/), ssids: this.ssidHint }),
+          firmware: kv.get("software version"),
+          hardware: kv.get("hardware version"),
+        },
+        uptime: prettyUptime(kv.get("uptime")),
+        cpuPercent: parsePercent(kv.get("cpu usage")),
+        memoryPercent: parsePercent(kv.get("memory usage")),
+        dns: (kv.get("name servers") ?? "").split(/[,\s]+/).filter(Boolean),
+        lan: {
+          ip: kv.get("ip address") ?? new URL(this.ctx.baseUrl).hostname,
+          netmask: kv.get("subnet mask"),
+          dhcp: kv.has("dhcp server") ? /enable/i.test(kv.get("dhcp server")!) : undefined,
+          mac: kv.get("mac address") ? normalizeMac(kv.get("mac address")!) ?? undefined : undefined,
+        },
+        internet: {
+          online: !!inet?.up && !!inet.ipv4,
+          publicIp: inet?.ipv4,
+          gateway: inet?.gateway,
+          uptime: inet?.uptime,
+          protocol: inet?.protocol,
+        },
+        wan,
+        fiber,
+        deviceCount: devices?.rows.filter((r) => r.cells.some((c) => normalizeMac(c))).length ?? 0,
+        fetchedAt: Date.now(),
+      };
+    });
+  }
+
+  // ---------------------------------------------------------------- devices
+
+  private async readMacFilter() {
+    const snap = await this.read(PAGES.macFilter);
+    const table = findTable(snap, ["Source MAC Address"]);
+    const blocked = (table?.rows ?? [])
+      .map((r) => ({ row: r, mac: r.cells.map((c) => normalizeMac(c)).find(Boolean) ?? null }))
+      .filter((x): x is { row: TableSnapshot["rows"][number]; mac: string } => !!x.mac);
+    return {
+      snap,
+      enabled: checkedValue(snap, "formFilterDefault", "maccap") === "1",
+      blacklist: checkedValue(snap, "formFilterDefault", "outAct") !== "0",
+      rows: table?.rows ?? [],
+      blocked,
+    };
+  }
+
+  async getDevices(): Promise<Device[]> {
+    return this.lock.run(async () => {
+      const snap = await this.read(PAGES.status);
+      const t = findTable(snap, ["MAC Address", "IPv4 Address"]);
+      const idx = (h: string) => t?.header.findIndex((x) => x.toLowerCase().includes(h)) ?? -1;
+      const [iDev, iName, iMac, iV4, iV6] = [idx("device"), idx("name"), idx("mac"), idx("ipv4"), idx("ipv6")];
+      const filter = await this.readMacFilter().catch(() => null);
+      const listed = new Set(filter?.enabled ? filter.blocked.map((b) => b.mac) : []);
+      const allowlist = !!filter?.enabled && !filter.blacklist;
+      const isBlocked = (mac: string) => (allowlist ? !listed.has(mac) : listed.has(mac));
+      const blockedSet = new Set(allowlist ? [] : listed);
+
+      const devices = new Map<string, Device>();
+      for (const r of t?.rows ?? []) {
+        const mac = normalizeMac(r.cells[iMac] ?? "");
+        if (!mac) continue;
+        const kind = (r.cells[iDev] ?? "").toUpperCase();
+        const name = r.cells[iName];
+        devices.set(mac, {
+          mac,
+          hostname: name && !/^(unknown|--|-)$/i.test(name) ? name : undefined,
+          ipv4: r.cells[iV4] && r.cells[iV4] !== "--" ? r.cells[iV4] : undefined,
+          ipv6: r.cells[iV6] && r.cells[iV6] !== "--" ? r.cells[iV6] : undefined,
+          medium: kind.includes("WLAN") || kind.includes("WIFI") ? "wifi" : kind.includes("LAN") || kind.includes("ETH") ? "wired" : "unknown",
+          online: true,
+          blocked: isBlocked(mac),
+        });
+      }
+      for (const mac of blockedSet)
+        if (!devices.has(mac)) devices.set(mac, { mac, medium: "unknown", online: false, blocked: true });
+      if (allowlist)
+        for (const mac of listed)
+          if (!devices.has(mac)) devices.set(mac, { mac, medium: "unknown", online: false, blocked: false });
+      return [...devices.values()];
+    });
+  }
+
+  async setDeviceBlocked(rawMac: string, blocked: boolean): Promise<void> {
+    const mac = normalizeMac(rawMac);
+    if (!mac) throw new RouterError("That doesn't look like a valid device address.", "validation");
+    return this.lock.run(async () => {
+      let f = await this.readMacFilter();
+      const allowlist = f.enabled && !f.blacklist;
+      // In allow-list mode the list holds ALLOWED devices: blocking = removing.
+      const wantListed = allowlist ? !blocked : blocked;
+      if (allowlist) {
+        if (wantListed) await this.addFilterMac(mac, f);
+        else await this.removeFilterMac(mac, f);
+        const after = await this.readMacFilter();
+        if (after.blocked.some((b) => b.mac === mac) !== wantListed) throw new RouterError("The router accepted the request but the change didn't stick.", "rejected");
+        return;
+      }
+      if (blocked) {
+        if (!f.enabled) {
+          await this.submit(PAGES.macFilter, { form: "formFilterDefault", button: "setSwitch", values: { maccap: "1" } });
+          f = await this.readMacFilter();
+        }
+        if (!f.blacklist) {
+          await this.submit(PAGES.macFilter, { form: "formFilterDefault", button: "setMacDft", values: { outAct: "1" } });
+          f = await this.readMacFilter();
+        }
+        await this.addFilterMac(mac, f);
+      } else {
+        await this.removeFilterMac(mac, f);
+      }
+      const after = await this.readMacFilter();
+      const isBlocked = after.blocked.some((b) => b.mac === mac);
+      if (isBlocked !== blocked) throw new RouterError("The router accepted the request but the change didn't stick.", "rejected");
+    });
+  }
+
+  private async addFilterMac(mac: string, f: Awaited<ReturnType<RealtekBoaDriver["readMacFilter"]>>) {
+    if (f.blocked.some((b) => b.mac === mac)) return;
+    // Try the compact format first (the router's own examples use it), then colons.
+    let lastErr: unknown;
+    for (const fmt of [compactMac(mac), mac.toUpperCase(), mac]) {
+      try {
+        await this.submit(PAGES.macFilter, { form: "formFilterAdd", button: "addFilterMac", values: { srcmac: fmt } });
+        return;
+      } catch (e) {
+        lastErr = e;
+        if (!(e instanceof RouterError && e.code === "validation")) break;
+      }
+    }
+    throw lastErr;
+  }
+
+  private async removeFilterMac(mac: string, f: Awaited<ReturnType<RealtekBoaDriver["readMacFilter"]>>) {
+    const row = rowWithMac(f.rows, mac);
+    if (!row) return;
+    const box = row.inputs.find((i) => i.type === "checkbox" && i.name);
+    if (!box) throw new RouterError("Couldn't find this device in the router's list.", "parse");
+    await this.submit(PAGES.macFilter, { form: "formFilterDel", button: "deleteSelFilterMac", values: { [box.name]: true } });
+  }
+
+  getAccessControl(): Promise<AccessControl> {
+    return this.lock.run(async () => {
+      const f = await this.readMacFilter();
+      return {
+        mode: f.enabled && !f.blacklist ? "allowlist" : "blocklist",
+        macs: f.enabled ? f.blocked.map((b) => b.mac) : [],
+        supported: ["blocklist", "allowlist"],
+      };
+    });
+  }
+
+  /**
+   * Order matters so nobody gets locked out half-way:
+   *  1. empty the list while still in block-list mode (blocks nobody),
+   *  2. switch the mode,
+   *  3. add the new entries.
+   * If anything fails while turning on the allow list, we fall back to an
+   * empty block list (= everyone allowed).
+   */
+  setAccessControl(mode: AccessMode, rawMacs: string[]): Promise<void> {
+    const macs = [...new Set(rawMacs.map((m) => normalizeMac(m)).filter((m): m is string => !!m))];
+    if (mode === "allowlist" && macs.length === 0) return Promise.reject(new RouterError("Add at least one device to the allow list.", "validation"));
+    return this.lock.run(async () => {
+      let f = await this.readMacFilter();
+      if (!f.enabled) {
+        await this.submit(PAGES.macFilter, { form: "formFilterDefault", button: "setSwitch", values: { maccap: "1" } });
+        f = await this.readMacFilter();
+      }
+      const wantBlacklist = mode === "blocklist";
+      try {
+        if (f.blocked.length) {
+          if (f.blacklist || mode === "blocklist") {
+            await this.submit(PAGES.macFilter, { form: "formFilterDel", button: "deleteAllFilterMac" });
+            f = await this.readMacFilter();
+          }
+        }
+        if (f.blacklist !== wantBlacklist) {
+          await this.submit(PAGES.macFilter, { form: "formFilterDefault", button: "setMacDft", values: { outAct: wantBlacklist ? "1" : "0" } });
+          f = await this.readMacFilter();
+        }
+        if (!wantBlacklist && f.blocked.length) {
+          // Coming from an existing allow list: drop entries not wanted any more.
+          for (const b of f.blocked) if (!macs.includes(b.mac)) await this.removeFilterMac(b.mac, await this.readMacFilter());
+        }
+        for (const mac of macs) await this.addFilterMac(mac, await this.readMacFilter());
+      } catch (e) {
+        if (!wantBlacklist) {
+          try {
+            await this.submit(PAGES.macFilter, { form: "formFilterDefault", button: "setMacDft", values: { outAct: "1" } });
+            await this.submit(PAGES.macFilter, { form: "formFilterDel", button: "deleteAllFilterMac" });
+          } catch {}
+        }
+        throw e;
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------- wi-fi
+
+  private async selectRadio(index: number) {
+    await this.get(`/boaform/formWlanRedirect?redirect-url=${encodeURIComponent(PAGES.wlanBasic)}&wlan_idx=${index}`);
+  }
+
+  private async readRadio(index: number): Promise<WifiNetwork | null> {
+    await this.selectRadio(index);
+    const basic = await this.read(PAGES.wlanBasic);
+    if (checkedValue(basic, "wlanSetup", "wlan_idx") !== String(index)) return null;
+    const sec = await this.read(PAGES.wlanSecurity);
+    const bandLabel = selectedLabel(basic, "wlanSetup", "band") ?? "";
+    const band: Band = /5\s*G/i.test(bandLabel) ? "5GHz" : /6\s*G/i.test(bandLabel) ? "6GHz" : "2.4GHz";
+    const method = selectedLabel(sec, "formEncrypt", "security_method");
+    const psk = field(sec, "formEncrypt", "pskValue")[0]?.value;
+    return {
+      id: String(index),
+      band,
+      enabled: !field(basic, "wlanSetup", "wlanDisabled")[0]?.checked,
+      ssid: field(basic, "wlanSetup", "ssid")[0]?.value ?? "",
+      password: /none/i.test(method ?? "") ? undefined : psk,
+      security: securityLabel(method),
+      channel: selectedLabel(basic, "wlanSetup", "chan"),
+      editable: { ssid: true, password: true, enabled: true },
+    };
+  }
+
+  async getWifi(): Promise<WifiNetwork[]> {
+    return this.lock.run(async () => {
+      const out: WifiNetwork[] = [];
+      for (const i of [0, 1]) {
+        const n = await this.readRadio(i).catch(() => null);
+        if (n) out.push(n);
+      }
+      this.ssidHint = out.map((n) => n.ssid);
+      return out.sort((a, b) => a.band.localeCompare(b.band));
+    });
+  }
+
+  async updateWifi(id: string, patch: WifiPatch): Promise<void> {
+    const index = Number(id);
+    return this.lock.run(async () => {
+      if (patch.ssid !== undefined || patch.enabled !== undefined) {
+        await this.selectRadio(index);
+        const values: Record<string, string | boolean> = {};
+        if (patch.enabled !== undefined) values.wlanDisabled = !patch.enabled;
+        if (patch.ssid !== undefined) values.ssid = patch.ssid.trim();
+        await this.submit(PAGES.wlanBasic, { form: "wlanSetup", button: "save", values });
+        await sleep(1500);
+      }
+      if (patch.password !== undefined) {
+        await this.selectRadio(index);
+        const snap = await this.read(PAGES.wlanSecurity);
+        const method = checkedValue(snap, "formEncrypt", "security_method");
+        const values: Record<string, string> = {};
+        const order: string[] = [];
+        if (checkedValue(snap, "formEncrypt", "wpaSSID") !== "0") {
+          values.wpaSSID = "0";
+          order.push("wpaSSID");
+        }
+        if (!method || method === "0" || method === "1") {
+          // Open or WEP → upgrade to WPA2-Personal
+          const opt = field(snap, "formEncrypt", "security_method")[0]?.options?.find((o) => /wpa2/i.test(o.label) && !/wpa\//i.test(o.label));
+          values.security_method = opt?.value ?? "4";
+          values.wpaAuth = "psk";
+          order.push("security_method", "wpaAuth");
+        }
+        values.pskFormat = "0";
+        values.pskValue = patch.password;
+        order.push("pskFormat", "pskValue");
+        await this.selectRadio(index);
+        await this.submit(PAGES.wlanSecurity, { form: "formEncrypt", button: "save", values, order });
+        await sleep(1500);
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------- website blocking
+
+  private async readUrlBlocking() {
+    const snap = await this.read(PAGES.urlBlocking);
+    const t = findTable(snap, ["FQDN"]);
+    const rows = (t?.rows ?? []).filter((r) => r.cells.some((c) => c && c.toLowerCase() !== "select"));
+    const iF = t?.header.findIndex((h) => h.toLowerCase() === "fqdn") ?? -1;
+    return {
+      enabled: checkedValue(snap, "url", "urlcap") === "1",
+      rows,
+      sites: rows.map((r) => (iF >= 0 ? r.cells[iF] : r.cells.find((c) => c.includes("."))) ?? "").filter(Boolean),
+    };
+  }
+
+  getSiteBlocking(): Promise<SiteBlocking> {
+    return this.lock.run(async () => {
+      const r = await this.readUrlBlocking();
+      return { enabled: r.enabled, sites: r.sites.map((s) => ({ id: s, pattern: s })) };
+    });
+  }
+
+  setSiteBlockingEnabled(enabled: boolean) {
+    return this.lock.run(async () => {
+      await this.submit(PAGES.urlBlocking, { form: "url", button: "apply", values: { urlcap: enabled ? "1" : "0" } });
+    });
+  }
+
+  addBlockedSite(pattern: string) {
+    const site = pattern.trim().replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
+    return this.lock.run(async () => {
+      if (!site) throw new RouterError("Enter a website like youtube.com", "validation");
+      const cur = await this.readUrlBlocking();
+      if (!cur.enabled) await this.submit(PAGES.urlBlocking, { form: "url", button: "apply", values: { urlcap: "1" } });
+      if (cur.sites.includes(site)) return;
+      await this.submit(PAGES.urlBlocking, { form: "url", button: "addFQDN", values: { urlFQDN: site } });
+    });
+  }
+
+  removeBlockedSite(id: string) {
+    return this.lock.run(async () => {
+      const cur = await this.readUrlBlocking();
+      const row = cur.rows.find((r) => r.cells.includes(id));
+      const box = row?.inputs.find((i) => i.type === "checkbox" && i.name);
+      if (!box) return;
+      await this.submit(PAGES.urlBlocking, { form: "url", button: "delFQDN", values: { [box.name]: true } });
+    });
+  }
+
+  // ---------------------------------------------------------------- all settings
+
+  async getAdvancedMenu(): Promise<AdvancedGroup[]> {
+    const res = await this.get("/admin/userMenu.js");
+    if (res.status >= 400 || !res.body) throw new RouterError("Couldn't read the router's menu.", "parse");
+    type Ev = { i: number; name?: string; path?: string };
+    const ev: Ev[] = [];
+    for (const m of res.body.matchAll(/name\s*:\s*["']([^"']+)["']/g)) ev.push({ i: m.index!, name: m[1].trim() });
+    for (const m of res.body.matchAll(/([\w\/-]+\.(?:asp|htm|html))/g)) ev.push({ i: m.index!, path: m[1] });
+    ev.sort((a, b) => a.i - b.i);
+    const groups: AdvancedGroup[] = [];
+    let group: AdvancedGroup | null = null;
+    for (let k = 0; k < ev.length; k++) {
+      const e = ev[k];
+      if (!e.name) continue;
+      const next = ev[k + 1];
+      if (next?.path) {
+        const path = next.path.startsWith("/") ? next.path : "/" + next.path;
+        if (/logout|upgrade|saveconf/i.test(path)) continue; // handled elsewhere / needs file upload
+        const wlan = group?.title.match(/wlan(\d)/i)?.[1];
+        if (!group) groups.push((group = { title: "General", items: [] }));
+        group.items.push({ id: wlan !== undefined ? `${path}#wlan=${wlan}` : path, title: e.name });
+      } else {
+        group = { title: e.name, items: [] };
+        groups.push(group);
+      }
+    }
+    return groups
+      .filter((g) => g.items.length)
+      .map((g) => ({ ...g, title: g.title.replace(/^wlan0\s*\((.+)\)/i, "Wi-Fi $1").replace(/^wlan1\s*\((.+)\)/i, "Wi-Fi $1") }));
+  }
+
+  async openAdvanced(id: string): Promise<LivePage> {
+    const [path, frag] = id.split("#");
+    const wlan = frag?.match(/wlan=(\d)/)?.[1];
+    if (!/^\/[\w\/-]+\.(asp|htm|html)$/.test(path)) throw new RouterError("Unknown settings page.", "validation");
+    const load = () =>
+      this.lock.run(async () => {
+        if (wlan !== undefined) await this.selectRadio(Number(wlan));
+        const page = await this.open(path);
+        return { page, snap: await page.snapshot() };
+      });
+    let { page, snap } = await load();
+    const live: LivePage = {
+      title: snap.title,
+      snapshot: snap,
+      fill: async (form, values) => {
+        live.snapshot = await page.fill(form, values);
+        return live.snapshot;
+      },
+      press: async (form, button) => {
+        const res = await this.lock.run(async () => {
+          const cap = await page.capture({ form, button });
+          if (!cap.submitted) {
+            const msg = cap.alerts.filter(Boolean).join(" ");
+            throw new RouterError(msg || "This button opens a classic router window that RouterDeck can't show. Use \"Open classic page\" instead.", "validation");
+          }
+          if (wlan !== undefined) await this.selectRadio(Number(wlan));
+          return this.send(page.url, cap);
+        });
+        let message: string | undefined;
+        if (res && !looksLikeLogin(res.body, res.url)) {
+          const pre = res.body.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i)?.[1];
+          const text = htmlToLines(pre ?? res.body);
+          if (pre || (text.length > 0 && text.length < 2500)) message = text.slice(0, 6000);
+        }
+        page.dispose();
+        ({ page, snap } = await load());
+        live.snapshot = snap;
+        return { message, snapshot: snap };
+      },
+      dispose: () => page.dispose(),
+    };
+    return live;
+  }
+
+  // ---------------------------------------------------------------- admin
+
+  changeAdminPassword(current: string, next: string) {
+    return this.lock.run(async () => {
+      await this.submit(PAGES.password, { form: "password", button: "save", values: { oldpass: current, newpass: next, confpass: next } });
+    });
+  }
+
+  reboot() {
+    return this.lock.run(async () => {
+      await this.submit(PAGES.reboot, { form: "cmboot", button: "Commit and Reboot" }, { tolerateDrop: true });
+    });
+  }
+}
+
+export const realtekBoa: DriverFactory = {
+  id: "realtek-boa",
+  name: "Realtek GPON (Boa web server)",
+  knownModels: ["SLT-Mobitel HG7 (fiber)", "Other Realtek RTL960x ONTs"],
+  async probe(_ctx, home) {
+    const b = home.body;
+    const server = home.headers["server"] ?? "";
+    let score = 0;
+    if (/boa/i.test(server)) score += 0.4;
+    if (/boaform/i.test(b)) score += 0.4;
+    if (/BroadBand Device Webserver/i.test(b)) score += 0.3;
+    if (/cmlogin/i.test(b)) score += 0.3;
+    if (score === 0) return null;
+    return { confidence: Math.min(score, 1), model: /HG7/.test(b) ? "HG7" : undefined, defaultUsername: "admin" };
+  },
+  create: (ctx) => new RealtekBoaDriver(ctx),
+};

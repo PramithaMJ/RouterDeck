@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens. Neutral "paper" surfaces with a calm indigo brand,
+ * semantic colors for network states (online / warning / blocked).
+ */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  --color-brand-50: oklch(0.97 0.02 275);
+  --color-brand-100: oklch(0.94 0.04 275);
+  --color-brand-200: oklch(0.88 0.08 275);
+  --color-brand-300: oklch(0.79 0.12 275);
+  --color-brand-400: oklch(0.68 0.17 275);
+  --color-brand-500: oklch(0.59 0.21 275);
+  --color-brand-600: oklch(0.52 0.22 275);
+  --color-brand-700: oklch(0.45 0.2 275);
+  --color-brand-800: oklch(0.38 0.16 275);
+  --color-brand-900: oklch(0.31 0.12 275);
+
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+  --radius-3xl: 1.5rem;
+
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-pop: 0 12px 32px -8px rgb(16 24 40 / 0.18), 0 4px 8px -4px rgb(16 24 40 / 0.08);
+
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-slide-up: slide-up 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pulse-ring: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 currentColor; opacity: 0.6; }
+    70% { box-shadow: 0 0 0 10px transparent; opacity: 0; }
+    100% { box-shadow: 0 0 0 0 transparent; opacity: 0; }
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --bg: oklch(0.985 0.003 270);
+    --surface: #fff;
+    --surface-2: oklch(0.97 0.004 270);
+    --border: oklch(0.92 0.006 270);
+    --text: oklch(0.21 0.02 270);
+    --muted: oklch(0.5 0.02 270);
+  }
+  .dark {
+    color-scheme: dark;
+    --bg: oklch(0.16 0.012 270);
+    --surface: oklch(0.205 0.014 270);
+    --surface-2: oklch(0.245 0.016 270);
+    --border: oklch(0.3 0.016 270);
+    --text: oklch(0.96 0.005 270);
+    --muted: oklch(0.7 0.015 270);
+  }
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: var(--color-brand-200);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+  dialog::backdrop {
+    background: rgb(10 12 20 / 0.45);
+    backdrop-filter: blur(4px);
+  }
+}
+
+@utility surface {
+  background: var(--surface);
+}
+@utility surface-2 {
+  background: var(--surface-2);
+}
+@utility border-subtle {
+  border-color: var(--border);
+}
+@utility text-muted {
+  color: var(--muted);
+}
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+@utility safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,26 @@
+:root { color-scheme: light dark; --brand: #4f46e5; --bg: #fafafc; --card: #fff; --text: #1b1c24; --muted: #6b6d7c; --border: #e6e6ee; }
+@media (prefers-color-scheme: dark) { :root { --bg: #14151c; --card: #1c1d26; --text: #f2f2f6; --muted: #a2a4b4; --border: #2e3040; } }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+.card { max-width: 420px; margin: 0 auto; padding: 28px 24px; }
+.logo { width: 48px; height: 48px; border-radius: 13px; background: linear-gradient(135deg, #7473f8, #4338ca); display: grid; place-items: center; }
+.logo svg { width: 100%; height: 100%; }
+.logo.small { width: 34px; height: 34px; border-radius: 9px; }
+h1 { font-size: 20px; margin: 18px 0 6px; letter-spacing: -0.01em; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 18px 0 8px; }
+.muted { color: var(--muted); font-size: 13px; }
+dl { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin: 18px 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; font-family: ui-monospace, Menlo, monospace; font-size: 13px; word-break: break-all; }
+.note { font-size: 12.5px; color: var(--muted); }
+.actions { display: flex; gap: 8px; margin-top: 22px; }
+button { flex: 1; height: 42px; border-radius: 11px; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+button.primary { background: var(--brand); color: #fff; }
+button.primary:hover { background: #4338ca; }
+button.secondary { background: var(--card); color: var(--text); border-color: var(--border); }
+button.small { flex: 0 0 auto; height: 30px; padding: 0 12px; font-size: 12.5px; }
+.popup { width: 340px; padding: 16px; }
+.popup header { display: flex; gap: 10px; align-items: center; }
+ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+li { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.site { font-weight: 600; }

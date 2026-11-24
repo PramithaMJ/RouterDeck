@@ -1,0 +1,29 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: router
+    attributes:
+      label: Router model and ISP
+      placeholder: e.g. HG7 · SLT-Mobitel fiber
+  - type: dropdown
+    id: bridge
+    attributes:
+      label: How are you connecting?
+      options: [Browser extension, Local connector, Demo]
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: e.g. Chrome 142 on Windows 11
+  - type: markdown
+    attributes:
+      value: "⚠️ Please remove passwords, MAC addresses and IPs from screenshots and logs."
