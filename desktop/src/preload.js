@@ -34,5 +34,14 @@ contextBridge.exposeInMainWorld("routerdeckDesktop", {
     ipcRenderer.on("rd:theme", (_e, theme) => cb(theme));
   },
   checkForUpdates: () => call("rd:update:check"),
+  updates: {
+    state: () => call("rd:update:state"),
+    download: () => call("rd:update:download"),
+    install: () => call("rd:update:install"),
+    onChange: (cb) => {
+      if (typeof cb !== "function") return;
+      ipcRenderer.on("rd:update", (_e, state) => cb(state));
+    },
+  },
   openDownloads: () => call("rd:update:open"),
 });

@@ -188,6 +188,7 @@ export default function DevicesPage() {
   const [manualMac, setManualMac] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const labels = useAccessLabels();
+  const blockScope = useSession((st) => st.driver?.capabilities.blockScope);
   const host = useSession((st) => st.connection?.host) ?? "";
   const thisMac = useThisDevice((st) => st.byRouter[host]);
   const setThis = useThisDevice((st) => st.set);
@@ -386,7 +387,9 @@ export default function DevicesPage() {
 
       <p className="mt-4 flex items-start gap-2 px-1 text-[12.5px] text-muted">
         <Info className="mt-0.5 size-3.5 shrink-0" />
-        Blocked devices can still join your Wi-Fi but can&apos;t reach the internet. Changes take a few seconds while the router saves them.
+        {blockScope === "wifi"
+          ? "On this router, a blocked device can't join the Wi-Fi at all (it holds up to 10 devices, and devices on a cable can't be blocked). Changes restart the Wi-Fi for a few seconds."
+          : "Blocked devices can still join your Wi-Fi but can't reach the internet. Changes take a few seconds while the router saves them."}
       </p>
 
       <ConfirmDialog

@@ -12,6 +12,20 @@ export interface DesktopSettings {
   runInBackground: boolean;
   startAtLogin: boolean;
   shareWithPhones: boolean;
+  /** Download and install new versions without asking (Windows, Linux AppImage). */
+  autoUpdate: boolean;
+}
+
+export interface UpdateState {
+  status: "idle" | "checking" | "latest" | "available" | "downloading" | "ready" | "error";
+  current: string;
+  version?: string;
+  percent?: number;
+  /** true: the app replaces itself ("Restart to update"); false: it downloads the installer and opens it. */
+  inPlace: boolean;
+  auto?: boolean;
+  /** Downloaded installer (macOS .dmg / Linux .deb). */
+  file?: string;
 }
 
 export interface ShareStatus {
@@ -38,6 +52,12 @@ export interface DesktopBridge {
   /** status: available (downloading itself) | manual (needs a download) | latest | error | unavailable */
   checkForUpdates(): Promise<{ status: string; version?: string }>;
   openDownloads?(): Promise<void>;
+  updates?: {
+    state(): Promise<UpdateState>;
+    download(): Promise<UpdateState>;
+    install(): Promise<UpdateState>;
+    onChange(cb: (s: UpdateState) => void): void;
+  };
   /** Keeps the window frame, menus and dialogs in the same light/dark mode. */
   setTheme?(theme: "system" | "light" | "dark"): Promise<string>;
   /** The tray / View menu changed the appearance. */

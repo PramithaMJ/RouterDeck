@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, Copy, KeyRound, QrCode, RefreshCw, Share2, ShieldCheck, Sparkles, Ticket, Users, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { bandsLabel, DURATIONS, formatRemaining, guestPassword, shareText, untilMidnight, useGuestPasses, type GuestPass } from "@/lib/guest-pass";
-import { useRouterAction } from "@/lib/queries";
+import { useDevices, useRouterAction } from "@/lib/queries";
+import { useThisDevice } from "@/lib/this-device";
 import type { Band } from "@/lib/router/types";
 import { useSession } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -63,14 +64,19 @@ function CreateDialog({ open, onClose, defaultName, availableBands }: { open: bo
   const [duration, setDuration] = useState<number | null | "midnight">(4 * 3_600_000);
   const [isolated, setIsolated] = useState(true);
   const [bandKey, setBandKey] = useState("both");
+  // Which band is the device you're using on? Changing a band briefly
+  // restarts its Wi-Fi, so the guest network defaults to the other one.
+  const { data: devices } = useDevices();
+  const thisMac = useThisDevice((s) => s.byRouter[host]);
+  const myBand = devices?.find((d) => d.mac === thisMac && d.online)?.band;
+  const dualBand = availableBands.includes("2.4GHz") && availableBands.includes("5GHz");
   useEffect(() => {
     if (!open) return;
     setName(defaultName);
     setPassword(guestPassword());
-  }, [open, defaultName]);
+    setBandKey(dualBand && myBand === "5GHz" ? "2.4" : dualBand && myBand === "2.4GHz" ? "5" : "both");
+  }, [open, defaultName, dualBand, myBand]);
 
-  // Only offer a choice when the router actually has more than one band.
-  const dualBand = availableBands.includes("2.4GHz") && availableBands.includes("5GHz");
   const bands = dualBand ? BAND_CHOICES.find((c) => c.key === bandKey)!.bands : availableBands;
 
   const create = useRouterAction<{ ssid: string; password: string; isolated: boolean; bands: Band[]; expiresAt: number | null }>(
@@ -157,6 +163,15 @@ function CreateDialog({ open, onClose, defaultName, availableBands }: { open: bo
             </div>
           </div>
         )}
+        <p className="-mt-1 text-[12.5px] leading-relaxed text-muted">
+          Creating the guest network restarts Wi-Fi on {bands.length > 1 ? "both bands" : `the ${bands[0]?.replace("GHz", " GHz") ?? "chosen"} band`} for about 15 seconds. Devices on it reconnect by themselves.
+          {myBand && dualBand && (
+            <>
+              {" "}This device is on <b>{myBand.replace("GHz", " GHz")}</b>
+              {bands.includes(myBand) ? ", so it will drop briefly too." : ", so it stays connected."}
+            </>
+          )}
+        </p>
         <div className="flex items-center justify-between gap-4 rounded-lg bg-[var(--surface-2)] px-3.5 py-3">
           <div>
             <p className="text-[13.5px] font-medium">Keep guests separate</p>
@@ -291,6 +306,9 @@ export function GuestPassCard({ mainSsid }: { mainSsid?: string }) {
                 <XCircle className="size-4" /> Revoke now
               </Button>
             </div>
+            <p className="text-[12.5px] leading-relaxed text-muted">
+              <b className="font-medium text-[var(--text)]">iPhone can&apos;t join?</b> It may remember an older guest password. On the iPhone: Settings → Wi-Fi → ⓘ next to <b>{active.ssid}</b> → Forget This Network, then scan the QR again. Revoking or a new password restarts the guest Wi-Fi for a few seconds.
+            </p>
             {transportKind !== "desktop" && active.expiresAt && (
               <p className="text-[12.5px] text-muted">
                 RouterDeck turns the guest network off when time is up while it&apos;s open. Close it earlier and it happens next time you open RouterDeck, or use the RouterDeck desktop app, which does it on time in the background.

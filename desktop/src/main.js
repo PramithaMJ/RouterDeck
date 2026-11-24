@@ -35,7 +35,7 @@ if (!app.requestSingleInstanceLock()) {
 
 // ---------------------------------------------------------------- settings
 const SETTINGS_FILE = () => path.join(app.getPath("userData"), "settings.json");
-const DEFAULTS = { runInBackground: true, startAtLogin: false, shareWithPhones: false };
+const DEFAULTS = { runInBackground: true, startAtLogin: false, shareWithPhones: false, autoUpdate: true };
 let settings = { ...DEFAULTS };
 function loadSettings() {
   try {
@@ -154,6 +154,7 @@ function createWindow({ show }) {
     icon: IS_MAC ? undefined : path.join(TRAY_DIR, "icon.png"),
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
   });
+  watchInstallerDownloads(win);
   win.loadURL(APP_URL);
   win.once("ready-to-show", () => show && win.show());
   // Links to the web open in the default browser; the app never navigates away.
@@ -204,7 +205,13 @@ function buildTrayMenu() {
       { label: "Start at login", type: "checkbox", checked: settings.startAtLogin, click: (i) => applySettings({ startAtLogin: i.checked }) },
       { label: "Appearance", submenu: appearanceMenu() },
       { type: "separator" },
-      { label: "Check for updates", click: () => void checkForUpdates(true) },
+      update.status === "ready"
+        ? { label: `Restart to update to ${update.version ?? "the new version"}`, click: () => installUpdate() }
+        : update.status === "available"
+          ? { label: `Download update ${update.version ?? ""}`.trim(), click: () => void downloadUpdate() }
+          : update.status === "downloading"
+            ? { label: `Downloading update… ${update.percent ?? 0}%`, enabled: false }
+            : { label: "Check for updates", click: () => void checkForUpdates(true) },
       { label: `Version ${app.getVersion()}`, enabled: false },
       { type: "separator" },
       {
@@ -296,64 +303,120 @@ function applySettings(patch) {
     } catch {}
   }
   if ("shareWithPhones" in patch) settings.shareWithPhones ? startShare() : stopShare();
+  if ("autoUpdate" in patch) {
+    setUpdate({});
+    if (settings.autoUpdate && selfUpdates && update.status === "available") void downloadUpdate();
+  }
   buildTrayMenu();
   return settings;
 }
 
 // ---------------------------------------------------------------- updates
-// Windows (NSIS) and Linux AppImage update themselves in place. macOS can only
-// do that when the app is Developer ID signed (Squirrel.Mac checks the
-// signature), and a .deb is owned by the package manager, so those builds just
-// tell the user and open the download page instead.
+// The app checks GitHub releases and shows an "Update" banner inside the app.
+//  - Windows (NSIS) and Linux AppImage update in place: download (automatic if
+//    "Install updates automatically" is on), then "Restart to update".
+//  - macOS needs Developer ID signing to update in place (Squirrel.Mac checks
+//    the signature) and a .deb belongs to the package manager, so there one
+//    click downloads the new installer and opens it.
 const RELEASES_URL = "https://github.com/PramithaMJ/RouterDeck/releases/latest";
+const ASSET_BASE = "https://github.com/PramithaMJ/RouterDeck/releases/latest/download";
 let pkgMeta = {};
 try {
   pkgMeta = require("../package.json");
 } catch {}
 const selfUpdates = process.platform === "win32" || (process.platform === "linux" && !!process.env.APPIMAGE) || (process.platform === "darwin" && pkgMeta.routerdeckSignedMac === true);
 
-let updateInfo = { status: "idle" };
-let notifiedVersion = null;
+/** status: idle | checking | latest | available | downloading | ready | error */
+let update = { status: "idle", current: app.getVersion(), inPlace: selfUpdates };
+function setUpdate(patch) {
+  update = { ...update, ...patch, current: app.getVersion(), inPlace: selfUpdates, auto: !!settings.autoUpdate };
+  win?.webContents.send("rd:update", update);
+  buildTrayMenu();
+  return update;
+}
+
+function installerUrl() {
+  if (process.platform === "darwin") return `${ASSET_BASE}/RouterDeck-macOS-${process.arch === "arm64" ? "arm64" : "x64"}.dmg`;
+  if (process.platform === "linux") return `${ASSET_BASE}/RouterDeck-Linux-x64.deb`;
+  return `${ASSET_BASE}/RouterDeck-Windows-x64-Setup.exe`;
+}
+
 async function checkForUpdates(interactive) {
   if (!autoUpdater || !app.isPackaged) {
     if (interactive) await dialog.showMessageBox({ message: "Updates are checked in the installed app.", buttons: ["OK"] });
-    return { status: "unavailable" };
+    return setUpdate({ status: "idle" });
   }
+  if (update.status === "downloading" || update.status === "ready") return update;
+  setUpdate({ status: "checking" });
   try {
     const r = await autoUpdater.checkForUpdates();
     const latest = r?.updateInfo?.version;
-    const newer = latest && r?.isUpdateAvailable !== false && latest !== app.getVersion();
-    updateInfo = newer ? { status: selfUpdates ? "available" : "manual", version: latest, url: RELEASES_URL } : { status: "latest" };
+    const newer = !!latest && r?.isUpdateAvailable !== false && latest !== app.getVersion();
+    setUpdate(newer ? { status: update.status === "downloading" ? "downloading" : "available", version: latest } : { status: "latest", version: undefined });
+    if (newer && selfUpdates && settings.autoUpdate) void downloadUpdate();
   } catch {
-    updateInfo = { status: "error" };
+    setUpdate({ status: "error" });
   }
-  const announce = interactive || (updateInfo.status === "manual" && notifiedVersion !== updateInfo.version);
-  if (announce) {
-    if (updateInfo.status === "manual") {
-      notifiedVersion = updateInfo.version;
-      const { response } = await dialog.showMessageBox({
-        message: `RouterDeck ${updateInfo.version} is available`,
-        detail: `You have ${app.getVersion()}. Download the new version and install it over this one. Your settings are kept.`,
-        buttons: ["Download", "Later"],
-        defaultId: 0,
-        cancelId: 1,
-      });
-      if (response === 0) void shell.openExternal(RELEASES_URL);
-    } else if (interactive) {
-      const msg = updateInfo.status === "available" ? `RouterDeck ${updateInfo.version} is downloading. It installs when you quit.` : updateInfo.status === "latest" ? "You're on the latest version." : "Couldn't check for updates right now.";
-      await dialog.showMessageBox({ message: msg, buttons: ["OK"] });
-    }
+  if (interactive) {
+    if (update.status === "available" || update.status === "downloading") showWindow();
+    else await dialog.showMessageBox({ message: update.status === "latest" ? "You're on the latest version." : "Couldn't check for updates right now. Check your internet connection.", buttons: ["OK"] });
   }
-  return updateInfo;
+  return update;
+}
+
+async function downloadUpdate() {
+  if (!autoUpdater || update.status === "downloading" || update.status === "ready") return update;
+  if (selfUpdates) {
+    setUpdate({ status: "downloading", percent: 0 });
+    autoUpdater.downloadUpdate().catch(() => setUpdate({ status: "error" }));
+    return update;
+  }
+  // Mac (unsigned) / .deb: fetch the installer into Downloads and open it.
+  if (!win) createWindow({ show: false });
+  setUpdate({ status: "downloading", percent: 0 });
+  win.webContents.downloadURL(installerUrl());
+  return update;
+}
+
+function installUpdate() {
+  if (update.status !== "ready") return update;
+  if (selfUpdates) {
+    quitting = true;
+    setImmediate(() => autoUpdater.quitAndInstall(false, true));
+  } else if (update.file) {
+    void shell.openPath(update.file);
+  }
+  return update;
 }
 
 function initUpdates() {
   if (!autoUpdater || !app.isPackaged) return;
-  autoUpdater.autoDownload = selfUpdates;
+  autoUpdater.autoDownload = false; // we start downloads ourselves (auto or on click)
   autoUpdater.autoInstallOnAppQuit = selfUpdates;
-  autoUpdater.on("error", () => undefined);
+  autoUpdater.on("download-progress", (p) => setUpdate({ status: "downloading", percent: Math.round(p.percent || 0) }));
+  autoUpdater.on("update-downloaded", (info) => setUpdate({ status: "ready", version: info?.version ?? update.version, percent: 100 }));
+  autoUpdater.on("error", () => {
+    if (update.status === "downloading" || update.status === "checking") setUpdate({ status: "error" });
+  });
   setTimeout(() => void checkForUpdates(false), 15_000);
-  setInterval(() => void checkForUpdates(false), 6 * 3600_000);
+  setInterval(() => void checkForUpdates(false), 4 * 3600_000);
+}
+
+function watchInstallerDownloads(w) {
+  w.webContents.session.on("will-download", (_e, item) => {
+    if (!item.getURL().startsWith(ASSET_BASE) && !/github(usercontent)?\.com/.test(item.getURL())) return;
+    const file = path.join(app.getPath("downloads"), item.getFilename());
+    item.setSavePath(file);
+    item.on("updated", () => {
+      const total = item.getTotalBytes();
+      if (total) setUpdate({ status: "downloading", percent: Math.round((item.getReceivedBytes() / total) * 100) });
+    });
+    item.once("done", (_ev, state) => {
+      if (state !== "completed") return setUpdate({ status: "error" });
+      setUpdate({ status: "ready", percent: 100, file });
+      void shell.openPath(file); // opens the .dmg / Software installer
+    });
+  });
 }
 
 // ---------------------------------------------------------------- IPC (only from our own page)
@@ -414,6 +477,9 @@ function registerIpc() {
     return shareState;
   });
   handle("rd:update:check", () => checkForUpdates(false));
+  handle("rd:update:state", () => update);
+  handle("rd:update:download", () => downloadUpdate());
+  handle("rd:update:install", () => installUpdate());
   handle("rd:update:open", () => shell.openExternal(RELEASES_URL));
 }
 

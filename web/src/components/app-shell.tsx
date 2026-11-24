@@ -13,6 +13,7 @@ import { IspLogo } from "./isp-badge";
 import { GuestPassWatcher } from "./guest-pass";
 import { ThemeToggle } from "./theme-toggle";
 import { usePrefs } from "@/lib/preferences";
+import { UpdateBanner } from "./update-banner";
 import { Badge, cn, Spinner, StatusDot } from "./ui";
 
 type NavItem = { href: string; label: string; short?: string; icon: typeof Wifi; cap?: keyof DriverCapabilities; public?: boolean; mobile?: boolean; advanced?: boolean };
@@ -157,7 +158,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="min-w-0 px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
-        <div className="mx-auto max-w-5xl animate-fade-in">{children}</div>
+        <div className="mx-auto max-w-5xl animate-fade-in">
+          <UpdateBanner className="mb-5" />
+          {children}
+        </div>
         <div className="mx-auto mt-10 flex max-w-5xl justify-center lg:hidden">
           <BuiltBy />
         </div>

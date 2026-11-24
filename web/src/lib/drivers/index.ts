@@ -5,18 +5,18 @@ import { demoDriver } from "./demo";
 import { huaweiHiLink } from "./huawei-hilink";
 import { realtekBoa } from "./realtek-boa";
 import { starlink } from "./starlink";
+import { zteGoform } from "./zte-goform";
 
 /**
  * Registry of supported router families. Add a new brand by implementing
  * DriverFactory (see docs/ADDING_A_ROUTER.md) and listing it here.
  */
-export const DRIVERS: DriverFactory[] = [realtekBoa, huaweiHiLink, starlink];
+export const DRIVERS: DriverFactory[] = [realtekBoa, huaweiHiLink, zteGoform, starlink];
 
 /** Shown on the landing page so people know what's coming. */
 export const ROADMAP = [
   { name: "Huawei EchoLife fiber (HG8145 / EG8145)", isps: "SLT-Mobitel, Dialog Fiber" },
   { name: "ZTE ZXHN fiber (F670L / F660)", isps: "SLT-Mobitel" },
-  { name: "ZTE 4G (MF286 / MF283)", isps: "Dialog, Mobitel" },
   { name: "TP-Link Archer / Deco", isps: "Any ISP" },
 ];
 

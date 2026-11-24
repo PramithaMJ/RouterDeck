@@ -148,6 +148,11 @@ export interface DriverCapabilities {
   fiber: boolean;
   /** Every router settings page, rendered generically ("All settings"). */
   advanced?: boolean;
+  /**
+   * What "blocked" means on this router: "internet" (default) = can join the
+   * Wi-Fi but can't reach the internet; "wifi" = can't join the Wi-Fi at all.
+   */
+  blockScope?: "internet" | "wifi";
 }
 
 export interface AdvancedItem {

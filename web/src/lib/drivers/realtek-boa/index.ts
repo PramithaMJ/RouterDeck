@@ -862,31 +862,47 @@ class RealtekBoaDriver implements RouterDriver {
           await sleep(1500);
           continue;
         }
-        const values: Record<string, string | boolean> = {
-          [`wl_disable${n}`]: true,
-          [`wl_ssid${n}`]: cfg.ssid!.trim(),
-          [`wl_hide_ssid${n}`]: "0", // broadcast the name
-          [`wl_access${n}`]: cfg.isolated === false ? "0" : "1", // relay blocking
-        };
-        await this.submit(PAGES.multiAp, { form: "MultipleAP", button: "Apply Changes", values, order: Object.keys(values) });
-        await sleep(1500);
+        // Every "Apply" restarts this band's Wi-Fi (everyone on it drops for a
+        // few seconds), so only apply what actually changes.
+        const isolated = cfg.isolated !== false;
+        const cur = await this.readGuestSlot(b.idx);
+        if (!cur.enabled || cur.ssid !== cfg.ssid!.trim() || cur.isolated !== isolated) {
+          const values: Record<string, string | boolean> = {
+            [`wl_disable${n}`]: true,
+            [`wl_ssid${n}`]: cfg.ssid!.trim(),
+            [`wl_hide_ssid${n}`]: "0", // broadcast the name
+            [`wl_access${n}`]: isolated ? "1" : "0", // relay blocking
+          };
+          await this.get(`/boaform/formWlanRedirect?redirect-url=${encodeURIComponent(PAGES.multiAp)}&wlan_idx=${b.idx}`);
+          await this.submit(PAGES.multiAp, { form: "MultipleAP", button: "Apply Changes", values, order: Object.keys(values) });
+          await sleep(1500);
+        }
         // Password lives on the security page, per access point.
         const { page, opt } = await this.openGuestSecurity(b.idx);
-        let cap: CapturedSubmit;
+        let cap: CapturedSubmit | null = null;
         try {
           if (!opt) throw new RouterError("The router didn't create the guest network. Try again in a minute.", "rejected");
           const snap = await page.fill("formEncrypt", { wpaSSID: opt.value });
-          const methods = field(snap, "formEncrypt", "security_method")[0]?.options ?? [];
+          const f = (name: string) => field(snap, "formEncrypt", name)[0];
+          const methods = f("security_method")?.options ?? [];
           const wpa2 = methods.find((o) => /wpa2/i.test(o.label) && !/wpa\//i.test(o.label))?.value ?? "4";
-          cap = await page.capture({
-            form: "formEncrypt",
-            button: "save",
-            values: { security_method: wpa2, wpaAuth: "psk", pskFormat: "0", pskValue: cfg.password! },
-            order: ["security_method", "wpaAuth", "pskFormat", "pskValue"],
-          });
+          // WPA2 with AES only: iPhones refuse or warn on TKIP, which some
+          // firmwares default to for a new guest network.
+          const values: Record<string, string | boolean> = { security_method: wpa2, wpaAuth: "psk", pskFormat: "0", pskValue: cfg.password! };
+          if (f("wpa2ciphersuite_a")) values.wpa2ciphersuite_a = true;
+          if (f("wpa2ciphersuite_t")) values.wpa2ciphersuite_t = false;
+          if (f("ciphersuite_a")) values.ciphersuite_a = true;
+          if (f("ciphersuite_t")) values.ciphersuite_t = false;
+          const same =
+            f("security_method")?.value === wpa2 &&
+            f("pskValue")?.value === cfg.password &&
+            (!f("wpa2ciphersuite_a") || !!f("wpa2ciphersuite_a")?.checked) &&
+            (!f("wpa2ciphersuite_t") || !f("wpa2ciphersuite_t")?.checked);
+          if (!same) cap = await page.capture({ form: "formEncrypt", button: "save", values, order: Object.keys(values) });
         } finally {
           page.dispose();
         }
+        if (!cap) continue;
         await this.selectRadio(b.idx);
         await this.send(page.url, cap);
         await sleep(1500);

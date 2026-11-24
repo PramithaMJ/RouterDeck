@@ -5,6 +5,7 @@ import { desktopBridge } from "@/lib/transport/desktop";
 import { LogoMark } from "./brand";
 import { ConnectCard } from "./connect-card";
 import { ThemeToggle } from "./theme-toggle";
+import { UpdateBanner } from "./update-banner";
 
 /** Inside the desktop app, the home page is just a focused connect screen. */
 export function DesktopHome() {
@@ -21,6 +22,7 @@ export function DesktopHome() {
           </div>
           <ThemeToggle />
         </div>
+        <UpdateBanner className="mb-4" />
         <ConnectCard />
         <p className="mt-4 text-center text-[12px] text-muted">Your router password stays on this computer.</p>
       </div>

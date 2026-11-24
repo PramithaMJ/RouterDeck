@@ -7,6 +7,7 @@ import { useSession } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { desktopBridge, type DesktopSettings, type ShareStatus } from "@/lib/transport/desktop";
 import { Button, Card, CardHeader, Switch } from "./ui";
+import { useUpdateState } from "./update-banner";
 
 function Row({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
   return (
@@ -29,6 +30,7 @@ export function DesktopPrefsCard() {
   const [qr, setQr] = useState("");
   const [hasCreds, setHasCreds] = useState(false);
   const [checking, setChecking] = useState(false);
+  const update = useUpdateState();
 
   useEffect(() => {
     if (!bridge) return;
@@ -44,7 +46,7 @@ export function DesktopPrefsCard() {
 
   if (!bridge) return null;
 
-  async function update(patch: Partial<DesktopSettings>) {
+  async function update_(patch: Partial<DesktopSettings>) {
     const next = await bridge!.settings.set(patch);
     setPrefs(next);
     if ("shareWithPhones" in patch) setShare(await bridge!.share.status());
@@ -52,16 +54,16 @@ export function DesktopPrefsCard() {
 
   return (
     <Card className="mt-5">
-      <CardHeader title="RouterDeck app" description={`Version ${bridge.version} · ${bridge.platform}`} icon={<Laptop className="size-5 text-muted" />} />
+      <CardHeader title="RouterDeck app" description={bridge.platform} icon={<Laptop className="size-5 text-muted" />} />
       <div className="divide-y divide-[var(--border)] px-5 pb-3 sm:px-6">
         <Row title="Keep running in the background" hint="Stays in the menu bar / system tray when you close the window, so guest passes end on time.">
-          <Switch checked={!!prefs?.runInBackground} onChange={(v) => update({ runInBackground: v })} label="Run in background" />
+          <Switch checked={!!prefs?.runInBackground} onChange={(v) => update_({ runInBackground: v })} label="Run in background" />
         </Row>
         <Row title="Start when the computer starts" hint="Opens quietly in the background after you log in.">
-          <Switch checked={!!prefs?.startAtLogin} onChange={(v) => update({ startAtLogin: v })} label="Start at login" />
+          <Switch checked={!!prefs?.startAtLogin} onChange={(v) => update_({ startAtLogin: v })} label="Start at login" />
         </Row>
         <Row title="Share with phones on this Wi-Fi" hint="Phones open RouterDeck from this computer, no install needed on the phone.">
-          <Switch checked={!!prefs?.shareWithPhones} onChange={(v) => update({ shareWithPhones: v })} label="Share with phones" />
+          <Switch checked={!!prefs?.shareWithPhones} onChange={(v) => update_({ shareWithPhones: v })} label="Share with phones" />
         </Row>
         {prefs?.shareWithPhones && (
           <div className="flex flex-col items-center gap-4 py-4 sm:flex-row sm:items-start">
@@ -93,24 +95,50 @@ export function DesktopPrefsCard() {
             Forget
           </Button>
         </Row>
-        <Row title="Updates" hint="New versions come from RouterDeck’s GitHub releases.">
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={checking}
-            onClick={async () => {
-              setChecking(true);
-              const r = await bridge.checkForUpdates().catch(() => ({ status: "error" }));
-              setChecking(false);
-              const v = "version" in r ? r.version : "";
-              if (r.status === "manual") {
-                toast.info(`RouterDeck ${v} is out. Opening the download page.`);
-                void bridge.openDownloads?.();
-              } else toast.info(r.status === "available" ? `Update ${v} is downloading. It installs when you quit.` : r.status === "latest" ? "You're on the latest version." : "Couldn't check for updates right now.");
-            }}
-          >
-            <RefreshCw className="size-3.5" /> Check
-          </Button>
+        <Row
+          title="Install updates automatically"
+          hint={update?.inPlace === false ? "On this computer RouterDeck downloads the new installer for you; you finish with one click." : "Downloads new versions in the background. Restart RouterDeck to finish."}
+        >
+          <Switch checked={!!prefs?.autoUpdate} onChange={(v) => update_({ autoUpdate: v })} label="Install updates automatically" />
+        </Row>
+        <Row
+          title={`Version ${bridge.version}`}
+          hint={
+            update?.status === "available"
+              ? `RouterDeck ${update.version} is available.`
+              : update?.status === "downloading"
+                ? `Downloading ${update.version ?? "update"}… ${update.percent ?? 0}%`
+                : update?.status === "ready"
+                  ? `${update.version} is ready to install.`
+                  : update?.status === "latest"
+                    ? "You're on the latest version."
+                    : "New versions come from RouterDeck’s GitHub releases."
+          }
+        >
+          {update?.status === "available" ? (
+            <Button size="sm" onClick={() => void bridge.updates?.download()}>
+              Update now
+            </Button>
+          ) : update?.status === "ready" ? (
+            <Button size="sm" onClick={() => void bridge.updates?.install()}>
+              {update.inPlace ? "Restart to update" : "Open installer"}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={checking || update?.status === "checking" || update?.status === "downloading"}
+              onClick={async () => {
+                setChecking(true);
+                const r = await bridge.checkForUpdates().catch(() => ({ status: "error" }));
+                setChecking(false);
+                if (r.status === "latest") toast.success("You're on the latest version.");
+                else if (r.status === "error") toast.info("Couldn't check for updates right now.");
+              }}
+            >
+              <RefreshCw className="size-3.5" /> Check
+            </Button>
+          )}
         </Row>
       </div>
     </Card>

@@ -20,6 +20,10 @@ module.exports = {
     { from: "build/tray", to: "tray" },
   ],
   asar: true,
+  // Smaller downloads: maximum compression and only English UI resources
+  // (Electron ships ~55 languages; RouterDeck's own UI is English).
+  compression: "maximum",
+  electronLanguages: ["en", "en-US", "en-GB"],
   // Lets the app know whether macOS can update itself (needs Developer ID signing).
   extraMetadata: { routerdeckSignedMac: signedMac },
   publish: [{ provider: "github", owner: "PramithaMJ", repo: "RouterDeck", releaseType: "release" }],
