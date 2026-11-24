@@ -222,7 +222,19 @@ export default function DashboardPage() {
           )}
         </Tile>}
         {!caps?.devices && <Tile icon={<Gauge className="size-4" />} label="Speed test" href="/speed-test/" value="Run" sub="Check your real speed" />}
-        <Tile icon={<Clock className="size-4" />} label="Router uptime" value={ov?.uptime ?? <Skeleton className="h-8 w-20" />} sub={ov?.identity.firmware ? `Firmware ${ov.identity.firmware}` : undefined} />
+        {!ov || ov.uptime ? (
+          <Tile icon={<Clock className="size-4" />} label="Router uptime" value={ov?.uptime ?? <Skeleton className="h-8 w-20" />} sub={ov?.identity.firmware ? `Firmware ${ov.identity.firmware}` : undefined} />
+        ) : ov.cellular?.rsrp !== undefined ? (
+          // Routers that don't report their own uptime (many 4G boxes): show signal quality instead.
+          <Tile
+            icon={<SignalHigh className="size-4" />}
+            label="Mobile signal"
+            value={ov.cellular.rsrp >= -80 ? "Excellent" : ov.cellular.rsrp >= -90 ? "Good" : ov.cellular.rsrp >= -100 ? "Fair" : "Weak"}
+            sub={`${ov.cellular.rsrp} dBm${ov.cellular.band ? ` · ${ov.cellular.band}` : ""}${ov.identity.firmware ? ` · Firmware ${ov.identity.firmware}` : ""}`}
+          />
+        ) : (
+          <Tile icon={<Clock className="size-4" />} label="Router" value={ov.identity.model} sub={ov.identity.firmware ? `Firmware ${ov.identity.firmware}` : undefined} />
+        )}
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.15fr]">

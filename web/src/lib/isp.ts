@@ -49,7 +49,8 @@ export function detectIsp(hints: { plmn?: string; ssids?: string[]; dns?: string
   const plmn = (hints.plmn ?? "").toLowerCase();
   if (plmn) {
     if (/dialog/.test(plmn)) return "dialog";
-    if (/mobitel|slt/.test(plmn)) return "mobitel";
+    if (/slt/.test(plmn)) return "slt"; // SLT-Mobitel (the network name shows as "SLT")
+    if (/mobitel/.test(plmn)) return "mobitel";
     if (/hutch|etisalat/.test(plmn)) return "hutch";
     if (/airtel/.test(plmn)) return "airtel";
     if (/lanka ?bell/.test(plmn)) return "lankabell";

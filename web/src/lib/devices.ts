@@ -4,9 +4,9 @@ import { isRandomizedMac } from "./router/util";
 export type DeviceKind = "phone" | "laptop" | "desktop" | "tv" | "tablet" | "console" | "speaker" | "camera" | "iot" | "unknown";
 
 const RULES: [RegExp, DeviceKind][] = [
+  [/macbook|laptop|thinkpad|xps|zenbook|vivobook|ideapad|surface|notebook|chromebook|book-?(pro|air|m\d)|\bmb[pa]\b|-mb[pa]\b/i, "laptop"],
   [/iphone|android|galaxy|note|pixel|redmi|xiaomi|oppo|vivo|huawei|honor|oneplus|realme|nokia|phone|sm-[a-z]\d/i, "phone"],
   [/ipad|tab|kindle/i, "tablet"],
-  [/macbook|laptop|thinkpad|xps|zenbook|vivobook|ideapad|surface|notebook|chromebook/i, "laptop"],
   [/imac|desktop|-pc\b|^pc-|workstation|^desktop-|^[a-z0-9]{2}\d[a-z0-9]{9,}$/i, "desktop"],
   [/tv|bravia|roku|firestick|fire-tv|chromecast|appletv|apple-tv|android-tv|mibox|shield/i, "tv"],
   [/playstation|ps[45]|xbox|nintendo|switch/i, "console"],
