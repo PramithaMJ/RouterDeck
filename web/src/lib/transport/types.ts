@@ -10,7 +10,7 @@
  *
  * Transports only move bytes. All router-specific knowledge lives in drivers.
  */
-export type TransportKind = "extension" | "connector" | "tab" | "same-origin" | "demo";
+export type TransportKind = "desktop" | "extension" | "connector" | "tab" | "same-origin" | "demo";
 
 export interface RouterRequest {
   /** Absolute URL, e.g. http://192.168.1.1/status.asp */

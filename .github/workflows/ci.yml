@@ -33,7 +33,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Syntax-check extension and connector
+      - name: Syntax-check extension, connector and desktop app
         run: |
-          for f in extension/*.js connector/*.mjs; do node --check "$f"; done
+          for f in extension/*.js connector/*.mjs desktop/src/*.js desktop/scripts/*.mjs; do node --check "$f"; done
+          node -e 'require("./desktop/electron-builder.cjs")'
           node -e 'JSON.parse(require("fs").readFileSync("extension/manifest.json","utf8"))'

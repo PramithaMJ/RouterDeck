@@ -7,6 +7,7 @@ import { RouterError } from "./router/types";
 import { ConnectorTransport, detectConnector } from "./transport/connector";
 import { detectExtension, ExtensionTransport } from "./transport/extension";
 import { detectTabBridge, TabTransport } from "./transport/tab";
+import { desktopBridge, DesktopTransport } from "./transport/desktop";
 import type { Transport, TransportKind } from "./transport/types";
 import { isPrivateHost, TransportError } from "./transport/types";
 
@@ -32,6 +33,8 @@ export interface Availability {
   connectorPaired: boolean;
   /** Opened from the router-tab bookmark: the router's origin. */
   tab: { origin: string } | null;
+  /** Running inside the RouterDeck desktop app: its version. */
+  desktop: string | null;
   checkedAt: number;
 }
 
@@ -71,7 +74,9 @@ interface SessionState {
   /** Step 1 (automatic): find the router on this network. */
   discover(kind: TransportKind, onStep?: (m: string) => void): Promise<Identified | null>;
   /** Step 2: sign in. */
-  signIn(kind: TransportKind, router: Identified, username: string, password: string): Promise<void>;
+  signIn(kind: TransportKind, router: Identified, username: string, password: string, opts?: { remember?: boolean }): Promise<void>;
+  /** Desktop app: sign in again with the saved password after the router logged us out. */
+  reauth(): Promise<boolean>;
   /** Connects without a password if the router already has a valid session. */
   resume(kind: TransportKind, router: Identified): Promise<boolean>;
   signOut(opts?: { forget?: boolean }): Promise<void>;
@@ -118,6 +123,7 @@ export function normalizeHost(input: string): string {
 }
 
 function makeTransport(kind: TransportKind): Transport {
+  if (kind === "desktop") return new DesktopTransport();
   if (kind === "extension") return new ExtensionTransport();
   if (kind === "tab") return new TabTransport();
   if (kind === "connector") {
@@ -138,6 +144,12 @@ export const useSession = create<SessionState>((set, get) => ({
   connection: null,
 
   async refreshAvailability() {
+    const desk = desktopBridge();
+    if (desk) {
+      const availability = { extension: null, connector: null, connectorPaired: false, tab: null, desktop: desk.version, checkedAt: Date.now() };
+      set({ availability });
+      return availability;
+    }
     const [extension, tab] = await Promise.all([detectExtension(), detectTabBridge()]);
     // Only look for the connector when it could matter (avoids a noisy failed
     // request in the console for extension / router-page users).
@@ -155,7 +167,7 @@ export const useSession = create<SessionState>((set, get) => ({
         if (e instanceof TransportError && e.code === "unauthorized") setConnectorToken(null);
       }
     }
-    const availability = { extension, connector, connectorPaired, tab, checkedAt: Date.now() };
+    const availability = { extension, connector, connectorPaired, tab, desktop: null, checkedAt: Date.now() };
     set({ availability });
     return availability;
   },
@@ -179,11 +191,18 @@ export const useSession = create<SessionState>((set, get) => ({
       if (saved.transport === "extension" && !availability.extension) return set({ phase: "disconnected" });
       if (saved.transport === "connector" && !availability.connector) return set({ phase: "disconnected" });
       if (saved.transport === "tab" && !availability.tab) return set({ phase: "disconnected" });
+      if (saved.transport === "desktop" && !availability.desktop) return set({ phase: "disconnected" });
       const transport = makeTransport(saved.transport);
       const factory = DRIVERS.find((d) => d.id === saved.driverId);
       if (!factory) return set({ phase: "disconnected" });
       const driver = factory.create({ transport, baseUrl: saved.host });
       if (await driver.isLoggedIn()) return set({ phase: "connected", driver, transport, connection: saved });
+      // Desktop app with a remembered password: sign in silently.
+      const creds = saved.transport === "desktop" ? await desktopBridge()?.credentials.get(saved.host) : null;
+      if (creds) {
+        await driver.login(creds.username, creds.password);
+        return set({ phase: "connected", driver, transport, connection: saved });
+      }
     } catch {
       /* fall through */
     }
@@ -209,11 +228,16 @@ export const useSession = create<SessionState>((set, get) => ({
     return found[0] ? toIdentified(found[0]) : null;
   },
 
-  async signIn(kind, router, username, password) {
+  async signIn(kind, router, username, password, opts) {
     const transport = makeTransport(kind);
     const baseUrl = kind === "demo" ? "http://192.168.1.1" : normalizeHost(router.host);
     const driver = router.factory.create({ transport, baseUrl });
     if (router.requiresLogin) await driver.login(username, password);
+    const desk = desktopBridge();
+    if (kind === "desktop" && desk && router.requiresLogin) {
+      if (opts?.remember) await desk.credentials.set(baseUrl, username, password);
+      else await desk.credentials.clear(baseUrl);
+    }
     const connection: SavedConnection = { transport: kind, host: baseUrl, driverId: router.factory.id, model: router.model };
     writeSaved(connection);
     set({ phase: "connected", driver, transport, connection, saved: connection });
@@ -242,6 +266,19 @@ export const useSession = create<SessionState>((set, get) => ({
     } catch {}
     if (opts?.forget) writeSaved(null);
     set({ phase: "disconnected", driver: null, transport: null, connection: null, saved: opts?.forget ? null : readSaved() });
+  },
+
+  async reauth() {
+    const { driver, connection } = get();
+    if (!driver || connection?.transport !== "desktop") return false;
+    const creds = await desktopBridge()?.credentials.get(connection.host).catch(() => null);
+    if (!creds) return false;
+    try {
+      await driver.login(creds.username, creds.password);
+      return true;
+    } catch {
+      return false;
+    }
   },
 
   expire() {

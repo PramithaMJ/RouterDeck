@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/app-shell";
 import { Badge, Button, Card, ConfirmDialog, cn, Field, Input, Notice, PasswordInput, Skeleton, Switch } from "@/components/ui";
 import { WifiQrDialog } from "@/components/wifi-qr";
+import { GuestPassCard } from "@/components/guest-pass";
 import { generateWifiPassword, passwordStrength } from "@/lib/password";
 import { qk, useRouterAction, useWifi } from "@/lib/queries";
 import type { WifiNetwork, WifiPatch } from "@/lib/router/types";
@@ -181,6 +182,7 @@ export default function WifiPage() {
           {(error as Error).message}
         </Notice>
       )}
+      <GuestPassCard mainSsid={data?.find((n) => n.band === "2.4GHz")?.ssid ?? data?.[0]?.ssid} />
       <div className="grid gap-5 lg:grid-cols-2">
         {isLoading &&
           [0, 1].map((i) => (

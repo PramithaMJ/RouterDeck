@@ -4,6 +4,8 @@ import { ChevronRight, Gauge, KeyRound, LogOut, Monitor, Moon, Plug, Power, Rota
 import Link from "next/link";
 import { IspBadge } from "@/components/isp-badge";
 import { PhoneSetup } from "@/components/phone-setup";
+import { DesktopPrefsCard } from "@/components/desktop-prefs";
+import { desktopBridge } from "@/lib/transport/desktop";
 import { Smartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -222,12 +224,14 @@ export default function SettingsPage() {
         </Card>
       </div>
 
-      <Card className="mt-5">
+      <DesktopPrefsCard />
+
+      {!desktopBridge() && <Card className="mt-5">
         <CardHeader title="Use on your phone" description="Manage your router from an iPhone or Android on the same Wi-Fi." icon={<Smartphone className="size-5 text-muted" />} />
         <div className="p-5 sm:p-6">
           <PhoneSetup compact />
         </div>
-      </Card>
+      </Card>}
 
       {connection?.transport !== "demo" && (
         <Notice tone="brand" className="mt-5">

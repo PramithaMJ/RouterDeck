@@ -102,6 +102,28 @@ export interface AccessControl {
   supported: AccessMode[];
 }
 
+/** A separate Wi-Fi network for visitors (its own name and password). */
+export interface GuestWifi {
+  enabled: boolean;
+  ssid?: string;
+  password?: string;
+  /** Bands the guest network is broadcasting on right now. */
+  bands: Band[];
+  /** Bands the router has, i.e. what the guest network can be put on. */
+  availableBands?: Band[];
+  /** Guests can't reach each other (and, on most routers, your devices). */
+  isolated?: boolean;
+}
+
+export interface GuestWifiConfig {
+  enabled: boolean;
+  ssid?: string;
+  password?: string;
+  isolated?: boolean;
+  /** Which bands to broadcast on. Omitted = every band the router has. */
+  bands?: Band[];
+}
+
 export interface BlockedSite {
   id: string;
   pattern: string;
@@ -196,6 +218,8 @@ export interface RouterDriver {
    */
   getIpv6?(): Promise<{ enabled: boolean }>;
   setIpv6?(enabled: boolean): Promise<void>;
+  getGuestWifi?(): Promise<GuestWifi>;
+  setGuestWifi?(cfg: GuestWifiConfig): Promise<void>;
   getAdvancedMenu?(): Promise<AdvancedGroup[]>;
   openAdvanced?(id: string): Promise<LivePage>;
   /** Address of the router's own admin page, for "open classic page". */

@@ -10,6 +10,7 @@ import { useOverview } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { Logo, LogoMark } from "./brand";
 import { IspLogo } from "./isp-badge";
+import { GuestPassWatcher } from "./guest-pass";
 import { ThemeToggle } from "./theme-toggle";
 import { Badge, cn, Spinner, StatusDot } from "./ui";
 
@@ -98,6 +99,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[252px_1fr]">
+      {connected && <GuestPassWatcher />}
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-subtle px-4 py-5 lg:flex">
         <Logo href={connected ? "/dashboard/" : "/"} className="px-2" />
         <nav className="mt-8 space-y-1" aria-label="Main">

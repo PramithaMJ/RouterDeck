@@ -13,6 +13,21 @@ export const CONNECT_APPS = {
 
 export type ConnectApp = keyof typeof CONNECT_APPS;
 
+/** The full RouterDeck desktop app (Electron), built by the same workflow. */
+export const DESKTOP_APPS: Record<ConnectApp, { label: string; file: string; kind: string; alt?: { label: string; file: string } }> = {
+  windows: { label: "Windows", kind: "Installer · Windows 10 and 11", file: `${RELEASES}/RouterDeck-Windows-x64-Setup.exe` },
+  macArm: { label: "Mac (Apple Silicon)", kind: "Disk image · M1 and newer", file: `${RELEASES}/RouterDeck-macOS-arm64.dmg` },
+  macIntel: { label: "Mac (Intel)", kind: "Disk image · Intel Macs", file: `${RELEASES}/RouterDeck-macOS-x64.dmg` },
+  linux: {
+    label: "Linux",
+    kind: "AppImage · any distro",
+    file: `${RELEASES}/RouterDeck-Linux-x64.AppImage`,
+    alt: { label: ".deb for Ubuntu / Debian", file: `${RELEASES}/RouterDeck-Linux-x64.deb` },
+  },
+};
+
+export const RELEASES_PAGE = "https://github.com/PramithaMJ/RouterDeck/releases/latest";
+
 /** Chrome Web Store listing, once published (set NEXT_PUBLIC_CHROME_STORE_URL). */
 export const CHROME_STORE_URL = process.env.NEXT_PUBLIC_CHROME_STORE_URL || "";
 

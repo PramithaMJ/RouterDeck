@@ -1,6 +1,8 @@
 import { RouterPage, type CapturedSubmit, type PageSnapshot, type SubmitSpec, type TableSnapshot } from "../../runtime/page";
 import { detectIsp } from "../../isp";
 import type {
+  GuestWifi,
+  GuestWifiConfig,
   AccessControl,
   AccessMode,
   AdvancedGroup,
@@ -41,6 +43,7 @@ const PAGES = {
   password: "/password.asp",
   reboot: "/reboot.asp",
   ipv6: "/ipv6_enabledisable.asp",
+  multiAp: "/admin/wlmultipleap.asp",
   loginCandidates: ["/admin/login.asp", "/login.asp"],
 };
 
@@ -724,6 +727,130 @@ class RealtekBoaDriver implements RouterDriver {
       const box = row?.inputs.find((i) => i.type === "checkbox" && i.name);
       if (!box) return;
       await this.submit(PAGES.urlBlocking, { form: "url", button: "delFQDN", values: { [box.name]: true } });
+    });
+  }
+
+  // ---------------------------------------------------------------- guest Wi-Fi
+  //
+  // Uses virtual access point slot 3 on each band. Slots 1-2 are taken by the
+  // ISP (EasyMesh backhaul, PEO TV) and are never touched. Slot 3 gets its own
+  // name and WPA2 password, broadcast on, "Relay Blocking" (client isolation) on.
+
+  private static GUEST_SLOT = 3;
+
+  private async guestBands(): Promise<{ idx: number; band: Band }[]> {
+    const out: { idx: number; band: Band }[] = [];
+    for (const idx of [1, 0]) {
+      await this.selectRadio(idx);
+      const basic = await this.read(PAGES.wlanBasic).catch(() => null);
+      if (!basic || checkedValue(basic, "wlanSetup", "wlan_idx") !== String(idx)) continue;
+      const label = selectedLabel(basic, "wlanSetup", "band") ?? "";
+      out.push({ idx, band: /5\s*G/i.test(label) ? "5GHz" : "2.4GHz" });
+    }
+    return out;
+  }
+
+  private async readGuestSlot(idx: number) {
+    const n = RealtekBoaDriver.GUEST_SLOT;
+    await this.get(`/boaform/formWlanRedirect?redirect-url=${encodeURIComponent(PAGES.multiAp)}&wlan_idx=${idx}`);
+    const snap = await this.read(PAGES.multiAp);
+    const f = (name: string) => field(snap, "MultipleAP", name)[0];
+    return {
+      enabled: !!f(`wl_disable${n}`)?.checked,
+      ssid: f(`wl_ssid${n}`)?.value,
+      isolated: checkedValue(snap, "MultipleAP", `wl_access${n}`) === "1",
+    };
+  }
+
+  /** Opens the security page for the guest slot and returns its live state. */
+  private async openGuestSecurity(idx: number) {
+    await this.selectRadio(idx);
+    const page = await this.open(PAGES.wlanSecurity);
+    const snap = await page.snapshot();
+    const sel = field(snap, "formEncrypt", "wpaSSID")[0];
+    const opt = sel?.options?.find((o) => new RegExp(`AP\\s*${RealtekBoaDriver.GUEST_SLOT}\\b`, "i").test(o.label) || o.value === String(RealtekBoaDriver.GUEST_SLOT));
+    return { page, opt };
+  }
+
+  getGuestWifi(): Promise<GuestWifi> {
+    return this.lock.run(async () => {
+      const bands = await this.guestBands();
+      let enabled = false, ssid: string | undefined, isolated: boolean | undefined, password: string | undefined;
+      const onBands: Band[] = [];
+      for (const b of bands) {
+        const g = await this.readGuestSlot(b.idx);
+        if (g.enabled) {
+          enabled = true;
+          onBands.push(b.band);
+          ssid ??= g.ssid;
+          isolated ??= g.isolated;
+          if (password === undefined) {
+            const { page, opt } = await this.openGuestSecurity(b.idx);
+            try {
+              if (opt) {
+                const s2 = await page.fill("formEncrypt", { wpaSSID: opt.value });
+                password = field(s2, "formEncrypt", "pskValue")[0]?.value || undefined;
+              }
+            } finally {
+              page.dispose();
+            }
+          }
+        }
+      }
+      return { enabled, ssid, password, isolated, bands: onBands, availableBands: bands.map((b) => b.band) };
+    });
+  }
+
+  setGuestWifi(cfg: GuestWifiConfig): Promise<void> {
+    const n = RealtekBoaDriver.GUEST_SLOT;
+    if (cfg.enabled) {
+      if (!cfg.ssid?.trim() || cfg.ssid.length > 32) return Promise.reject(new RouterError("Guest network name must be 1-32 characters.", "validation"));
+      if (!cfg.password || cfg.password.length < 8 || cfg.password.length > 63) return Promise.reject(new RouterError("Guest password must be 8-63 characters.", "validation"));
+    }
+    return this.lock.run(async () => {
+      const bands = await this.guestBands();
+      const wanted = cfg.enabled ? bands.filter((b) => !cfg.bands?.length || cfg.bands.includes(b.band)) : [];
+      if (cfg.enabled && !wanted.length) throw new RouterError("This router doesn't have the chosen Wi-Fi band.", "validation");
+      for (const b of bands) {
+        await this.get(`/boaform/formWlanRedirect?redirect-url=${encodeURIComponent(PAGES.multiAp)}&wlan_idx=${b.idx}`);
+        if (!wanted.includes(b)) {
+          // Not wanted on this band (or guest Wi-Fi turned off): switch it off if it's on.
+          const cur = await this.readGuestSlot(b.idx);
+          if (!cur.enabled) continue;
+          await this.get(`/boaform/formWlanRedirect?redirect-url=${encodeURIComponent(PAGES.multiAp)}&wlan_idx=${b.idx}`);
+          await this.submit(PAGES.multiAp, { form: "MultipleAP", button: "Apply Changes", values: { [`wl_disable${n}`]: false } });
+          await sleep(1500);
+          continue;
+        }
+        const values: Record<string, string | boolean> = {
+          [`wl_disable${n}`]: true,
+          [`wl_ssid${n}`]: cfg.ssid!.trim(),
+          [`wl_hide_ssid${n}`]: "0", // broadcast the name
+          [`wl_access${n}`]: cfg.isolated === false ? "0" : "1", // relay blocking
+        };
+        await this.submit(PAGES.multiAp, { form: "MultipleAP", button: "Apply Changes", values, order: Object.keys(values) });
+        await sleep(1500);
+        // Password lives on the security page, per access point.
+        const { page, opt } = await this.openGuestSecurity(b.idx);
+        let cap: CapturedSubmit;
+        try {
+          if (!opt) throw new RouterError("The router didn't create the guest network. Try again in a minute.", "rejected");
+          const snap = await page.fill("formEncrypt", { wpaSSID: opt.value });
+          const methods = field(snap, "formEncrypt", "security_method")[0]?.options ?? [];
+          const wpa2 = methods.find((o) => /wpa2/i.test(o.label) && !/wpa\//i.test(o.label))?.value ?? "4";
+          cap = await page.capture({
+            form: "formEncrypt",
+            button: "save",
+            values: { security_method: wpa2, wpaAuth: "psk", pskFormat: "0", pskValue: cfg.password! },
+            order: ["security_method", "wpaAuth", "pskFormat", "pskValue"],
+          });
+        } finally {
+          page.dispose();
+        }
+        await this.selectRadio(b.idx);
+        await this.send(page.url, cap);
+        await sleep(1500);
+      }
     });
   }
 

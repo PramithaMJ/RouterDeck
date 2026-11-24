@@ -114,10 +114,19 @@ export function ConnectCard() {
   const checking = phase === "booting" || !availability;
 
   const tabOk = !!availability?.tab;
-  const ready = useCallback((m: Method | null) => m === "demo" || (m === "tab" && tabOk) || (m === "extension" && extOk) || (m === "connector" && conPaired), [extOk, conPaired, tabOk]);
+  const deskOk = !!availability?.desktop;
+  const [remember, setRemember] = useState(true);
+  const ready = useCallback(
+    (m: Method | null) => m === "demo" || (m === "desktop" && deskOk) || (m === "tab" && tabOk) || (m === "extension" && extOk) || (m === "connector" && conPaired),
+    [extOk, conPaired, tabOk, deskOk],
+  );
 
   useEffect(() => {
     if (!availability || method) return;
+    if (availability.desktop) {
+      setMethod("desktop");
+      return;
+    }
     if (availability.tab) {
       setMethod("tab");
       return;
@@ -213,7 +222,7 @@ export function ConnectCard() {
     setBusy("login");
     setError(null);
     try {
-      await signIn(method, found, username, password);
+      await signIn(method, found, username, password, { remember: method === "desktop" && remember });
       setPassword("");
     } catch (err) {
       setError(describeError(err));
@@ -247,7 +256,17 @@ export function ConnectCard() {
                 </span>
               </button>
             )}
-            {!phoneMode && (
+            {deskOk && (
+              <MethodRow
+                icon={<Router className="size-5" />}
+                title="This computer"
+                subtitle="The RouterDeck app talks to your router directly. Nothing else needed."
+                selected={method === "desktop"}
+                onSelect={() => setMethod("desktop")}
+                status={<Badge tone="green">Ready</Badge>}
+              />
+            )}
+            {!phoneMode && !deskOk && (
               <MethodRow
                 icon={<Bookmark className="size-5" />}
                 title="Router page button"
@@ -264,7 +283,7 @@ export function ConnectCard() {
                 }
               />
             )}
-            {!mobile && !phoneMode && <MethodRow
+            {!mobile && !phoneMode && !deskOk && <MethodRow
               icon={<Puzzle className="size-5" />}
               title="Browser extension"
               subtitle={CHROME_STORE_URL ? "Recommended. One click from the Chrome Web Store." : "For Chrome, Edge and Brave (manual install for now)."}
@@ -279,7 +298,7 @@ export function ConnectCard() {
                 ) : undefined
               }
             />}
-            <MethodRow
+            {!deskOk && <MethodRow
               icon={<Terminal className="size-5" />}
               title="RouterDeck Connect"
               subtitle={`${CHROME_STORE_URL ? "" : "Recommended. "}Small app for Windows, Mac and Linux. Works in every browser and lets your phones join.`}
@@ -293,7 +312,7 @@ export function ConnectCard() {
                   </Button>
                 ) : undefined
               }
-            />
+            />}
             <MethodRow icon={<PlayCircle className="size-5" />} title="Try the demo" subtitle="Explore everything with a simulated router." selected={method === "demo"} onSelect={() => setMethod("demo")} />
           </div>
 
@@ -401,6 +420,15 @@ export function ConnectCard() {
             <Field label="Password" htmlFor="pass">
               <PasswordInput id="pass" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus />
             </Field>
+            {method === "desktop" && (
+              <label className="flex cursor-pointer items-start gap-2.5 text-[13.5px]">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="mt-0.5 size-4 accent-[var(--color-brand-600)]" />
+                <span>
+                  Remember password on this computer
+                  <span className="block text-[12.5px] text-muted">Stored encrypted in your system keychain, so RouterDeck can sign back in and end guest passes on time.</span>
+                </span>
+              </label>
+            )}
           </div>
 
           {error && (
@@ -413,7 +441,7 @@ export function ConnectCard() {
             <Lock className="size-4" /> Sign in
           </Button>
           <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-[12px] text-muted">
-            <Lock className="size-3" /> Your password goes straight to your router and is never stored.
+            <Lock className="size-3" /> {method === "desktop" ? (remember ? "Saved only in this computer's keychain." : "Sent only to your router, never stored.") : "Your password goes straight to your router and is never stored."}
           </p>
         </form>
       )}

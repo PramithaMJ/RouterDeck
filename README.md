@@ -26,6 +26,8 @@ Starlink and more.
 | **Auto-detect** | Finds your router and recognises your provider (SLT-Mobitel, Dialog, Mobitel, Hutch, Airtel, Starlink) with its logo |
 | **Devices** | See who's online, rename devices, **block / unblock** in one tap, or switch to an **allow list** (only approved devices get internet) |
 | **Wi-Fi** | Rename networks, change or **generate** passwords, turn 2.4/5 GHz on/off, **share with a QR code** |
+| **Guest passes** | A separate guest Wi-Fi with a **temporary password** (1 hour … 1 week, or until you revoke it). Pick 2.4 GHz, 5 GHz or both, share by QR or message, extend, rotate or **revoke** any time |
+| **Desktop app** | Windows, macOS and Linux app: reaches the router directly, runs in the tray so guest passes end on time, remembers the login in the OS keychain, can share itself to phones, auto-updates |
 | **Speed test** | Download, upload, ping, jitter and loaded latency with a live animated gauge, history and plain-language verdicts |
 | **Protection** | Block websites for the whole network |
 | **All settings** | *Every* page of the router's own admin UI (DHCP, port forwarding, DMZ, UPnP, IPv6, diagnostics…) re-rendered as clean, modern forms |
@@ -68,7 +70,21 @@ See [SECURITY.md](SECURITY.md) for the full security model.
 
 ## Use it
 
-**On a computer**
+**Desktop app (easiest on a computer)**
+
+Download from **<https://router.pramitha.lk/download>** or [GitHub Releases](https://github.com/PramithaMJ/RouterDeck/releases/latest):
+
+| System | File |
+| --- | --- |
+| Windows 10/11 | [RouterDeck-Windows-x64-Setup.exe](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Windows-x64-Setup.exe) |
+| macOS Apple Silicon | [RouterDeck-macOS-arm64.dmg](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-macOS-arm64.dmg) |
+| macOS Intel | [RouterDeck-macOS-x64.dmg](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-macOS-x64.dmg) |
+| Linux | [AppImage](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Linux-x64.AppImage) · [.deb](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Linux-x64.deb) |
+
+Install, open, sign in. Nothing else to set up. The builds aren't signed with paid certificates yet, so the first launch asks once:
+Windows → *More info → Run anyway*; macOS → *System Settings → Privacy & Security → Open Anyway*.
+
+**In the browser**
 1. Open **<https://router.pramitha.lk>** on a computer connected to your home Wi-Fi.
 2. Pick one way to connect (one time):
    - **Router page button (no download):** drag the RouterDeck bookmark to your bookmarks bar, open `http://192.168.1.1`
@@ -105,10 +121,30 @@ npm run build        # static export → web/out
 
 ```
 web/         Next.js 16 static app (UI, drivers, sandbox runtime, speed test)
+desktop/     Electron desktop app (Windows, macOS, Linux)
 extension/   RouterDeck Connect, Manifest V3 browser extension
 connector/   Zero-dependency Node.js connector
 docs/        Guides (adding a router)
 ```
+
+Desktop app:
+
+```bash
+cd web && npm run build      # the desktop app bundles web/out
+cd ../desktop
+npm install
+npm start                    # run it
+npm run dist                 # installers for this OS → desktop/dist
+```
+
+## Releasing
+
+Push a tag (`git tag v1.1.0 && git push origin v1.1.0`). [release.yml](.github/workflows/release.yml) builds the desktop
+installers on Windows, macOS and Linux, the RouterDeck Connect helpers and the extension packages, and attaches them,
+with `SHA256SUMS.txt`, to a GitHub Release. Installed desktop apps pick the new version up from there.
+Code signing is optional and switches on when these repository secrets exist:
+`MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` (macOS, also enables
+in-place updates on Mac) and `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` (Windows).
 
 ## Deploy (free, Cloudflare Pages)
 

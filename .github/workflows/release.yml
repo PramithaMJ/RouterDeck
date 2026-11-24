@@ -1,10 +1,17 @@
-name: Release RouterDeck Connect
+name: Release
 
-# Builds the double-click "RouterDeck Connect" apps (Node single executable)
-# for Windows, macOS and Linux, packages the browser extension for the
-# Chrome Web Store / Edge Add-ons / Firefox Add-ons, and attaches all of it
-# to a GitHub Release.
-# Trigger: push a tag like v0.4.0, or run manually from the Actions tab.
+# One tag, everything users can download:
+#  - RouterDeck desktop app: installers for Windows (.exe), macOS (.dmg/.zip,
+#    Apple Silicon + Intel) and Linux (.AppImage/.deb), plus the latest*.yml
+#    files the app's auto-updater reads.
+#  - RouterDeck Connect: the small double-click helper (Node single executable).
+#  - Browser extension packages for the Chrome Web Store / Edge / Firefox.
+# Trigger: push a tag like v1.1.0, or run manually from the Actions tab.
+#
+# Optional signing secrets (builds still work without them):
+#   macOS:   MAC_CSC_LINK, MAC_CSC_KEY_PASSWORD, APPLE_ID,
+#            APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
+#   Windows: WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD
 
 on:
   push:
@@ -15,7 +22,69 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: --mac
+          - os: windows-latest
+            target: --win
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the web app
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Use the tag as the app version
+        if: github.ref_type == 'tag'
+        working-directory: desktop
+        shell: bash
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+      - name: Build installers
+        working-directory: desktop
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          # Empty secrets would make electron-builder try to sign with nothing.
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID WIN_CSC_LINK WIN_CSC_KEY_PASSWORD; do
+            [ -z "${!v}" ] && unset "$v"
+          done
+          export CSC_IDENTITY_AUTO_DISCOVERY=false
+          npm run prepare-web
+          npx electron-builder ${{ matrix.target }} --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.exe
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/*.blockmap
+            desktop/dist/latest*.yml
+          if-no-files-found: error
+
+  connect:
     strategy:
       fail-fast: false
       matrix:
@@ -55,7 +124,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: build
+    needs: [desktop, connect]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,12 +137,14 @@ jobs:
           merge-multiple: true
       - name: Package browser extension (Chrome/Edge store, Firefox, manual) + connector script
         run: node web/scripts/prepare-downloads.mjs assets
+      - name: Checksums
+        run: cd assets && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('connect-{0}', github.run_number) }}
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
         run: |
           ls -la assets
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
             && gh release upload "$TAG" assets/* --clobber --repo "$GITHUB_REPOSITORY" \
-            || gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --title "RouterDeck Connect $TAG" --generate-notes --target "$GITHUB_SHA"
+            || gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --title "RouterDeck $TAG" --notes-file .github/RELEASE_NOTES.md --generate-notes --target "$GITHUB_SHA"

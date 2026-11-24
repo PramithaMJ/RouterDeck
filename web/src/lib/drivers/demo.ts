@@ -1,4 +1,4 @@
-import type { AccessControl, AccessMode, Device, DriverFactory, Overview, RouterDriver, SiteBlocking, WifiNetwork, WifiPatch } from "../router/types";
+import type { AccessControl, AccessMode, Device, DriverFactory, GuestWifi, GuestWifiConfig, Overview, RouterDriver, SiteBlocking, WifiNetwork, WifiPatch } from "../router/types";
 import { RouterError } from "../router/types";
 import { normalizeMac, sleep } from "../router/util";
 
@@ -13,6 +13,7 @@ interface DemoState {
   wifi: WifiNetwork[];
   blocked: string[];
   mode?: AccessMode;
+  guest?: GuestWifi;
   allowed?: string[];
   sites: SiteBlocking;
   bootedAt: number;
@@ -184,6 +185,20 @@ class DemoDriver implements RouterDriver {
       n.password = patch.password;
     }
     if (patch.enabled !== undefined) n.enabled = patch.enabled;
+    this.save();
+  }
+
+  async getGuestWifi(): Promise<GuestWifi> {
+    await this.lag(400);
+    return { ...(this.s.guest ?? { enabled: false, bands: [] }), availableBands: ["2.4GHz", "5GHz"] };
+  }
+
+  async setGuestWifi(cfg: GuestWifiConfig) {
+    await this.lag(1400);
+    if (cfg.enabled && (!cfg.password || cfg.password.length < 8)) throw new RouterError("Guest password must be at least 8 characters.", "validation");
+    this.s.guest = cfg.enabled
+      ? { enabled: true, ssid: cfg.ssid ?? this.s.guest?.ssid, password: cfg.password, isolated: cfg.isolated ?? true, bands: cfg.bands?.length ? cfg.bands : ["2.4GHz", "5GHz"] }
+      : { ...(this.s.guest ?? { bands: [] }), enabled: false, bands: [] };
     this.save();
   }
 

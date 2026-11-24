@@ -8,10 +8,17 @@ import { toast } from "@/lib/toast";
 import { Toaster } from "./toaster";
 import { detectTabBridge, isFramed } from "@/lib/transport/tab";
 
+let reauthing: Promise<boolean> | null = null;
+
 function onAnyError(e: unknown) {
   if (e instanceof RouterError && e.code === "session-expired") {
-    toast.info("Your router signed you out. Please sign in again.");
-    useSession.getState().expire();
+    // Desktop app with a remembered password signs back in by itself.
+    reauthing ??= useSession.getState().reauth().finally(() => setTimeout(() => (reauthing = null), 5000));
+    void reauthing.then((ok) => {
+      if (ok) return;
+      toast.info("Your router signed you out. Please sign in again.");
+      useSession.getState().expire();
+    });
   }
 }
 

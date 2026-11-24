@@ -1,0 +1,26 @@
+{
+  "name": "routerdeck-desktop",
+  "productName": "RouterDeck",
+  "version": "1.1.0",
+  "description": "Manage your home router: devices, Wi-Fi, guest passes, speed test and every setting.",
+  "homepage": "https://router.pramitha.lk",
+  "license": "MIT",
+  "author": "Pramitha Jayasooriya",
+  "repository": "github:PramithaMJ/RouterDeck",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "prepare-web": "node scripts/prepare.mjs",
+    "start": "npm run prepare-web && electron .",
+    "pack": "npm run prepare-web && electron-builder --dir",
+    "dist": "npm run prepare-web && electron-builder --publish never",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/router-client.js"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  },
+  "devDependencies": {
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0"
+  }
+}

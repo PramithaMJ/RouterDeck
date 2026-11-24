@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BuiltByFooter } from "@/components/built-by";
 import { Logo } from "@/components/brand";
 import { ConnectCard } from "@/components/connect-card";
+import { DesktopHome } from "@/components/desktop-home";
 import { IspStrip } from "@/components/isp-strip";
 import { ProductPreview } from "@/components/product-preview";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -46,9 +47,13 @@ const FAQ = [
 export default function Home() {
   return (
     <div className="min-h-dvh">
+      <DesktopHome />
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
         <Logo />
         <nav className="flex items-center gap-0.5 text-[13.5px]">
+          <Link href="/download/" className="hidden rounded-lg px-3 py-2 text-muted transition hover:text-[var(--text)] sm:inline-flex">
+            Desktop app
+          </Link>
           <Link href="/speed-test/" className="hidden rounded-lg px-3 py-2 text-muted transition hover:text-[var(--text)] sm:inline-flex">
             Speed test
           </Link>
@@ -96,6 +101,13 @@ export default function Home() {
               Run a speed test
             </Link>{" "}
             without connecting anything.
+          </p>
+          <p className="mt-1.5 text-center text-[12.5px] text-muted">
+            Prefer an app?{" "}
+            <Link href="/download/" className="font-medium text-[var(--text)] underline decoration-[var(--border)] underline-offset-4 hover:decoration-[var(--text)]">
+              Get RouterDeck
+            </Link>{" "}
+            for Windows, Mac or Linux.
           </p>
         </section>
 

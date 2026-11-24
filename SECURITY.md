@@ -9,6 +9,7 @@ RouterDeck talks to the router that runs your home network, so we take security 
 | Website (`router.pramitha.lk`, `main` branch) | ✅ latest |
 | RouterDeck Connect extension | ✅ latest release |
 | Local connector | ✅ latest release |
+| Desktop app (Windows / macOS / Linux) | ✅ latest release |
 
 ## Reporting a vulnerability
 
@@ -33,6 +34,11 @@ Include what you found, how to reproduce it, and the impact you expect. You can 
   to approve each website/router pair, and requests host permission for that single router.
 - **Pairing code.** The connector listens on `127.0.0.1` only, answers allow-listed origins
   only, and requires a pairing code (sent as a header, which also forces a CORS preflight).
+- **Desktop app.** The UI is served from a custom `app://` origin with a strict CSP, `contextIsolation`
+  and `sandbox` on, and no Node access. It talks to the main process only through a narrow preload bridge
+  whose IPC handlers accept calls only from that origin, and router requests are limited to private
+  addresses. A saved router login is encrypted with the OS keychain (Electron `safeStorage`) and can be
+  forgotten in Settings. "Share with phones" is off by default and uses the connector's pairing code.
 - **Sandboxed router pages.** Router admin pages are rendered in an `allow-scripts` sandbox
   with an opaque origin and a CSP that blocks all network access; they cannot touch the app,
   its storage or the network.
