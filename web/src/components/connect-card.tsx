@@ -9,6 +9,8 @@ import { CHROME_STORE_URL } from "@/lib/downloads";
 import type { TransportKind } from "@/lib/transport/types";
 import { IspBadge, IspLogo } from "./isp-badge";
 import { ConnectorSetupDialog, ExtensionSetupDialog } from "./setup-dialogs";
+import { BookmarkletDialog } from "./bookmarklet";
+import { Bookmark } from "lucide-react";
 import { PhoneSetup } from "./phone-setup";
 import { isMobileDevice } from "@/lib/site";
 import { servedByConnector } from "@/lib/transport/connector";
@@ -97,7 +99,7 @@ export function ConnectCard() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | "detect" | "login">(null);
-  const [dialog, setDialog] = useState<null | "extension" | "connector" | "phone">(null);
+  const [dialog, setDialog] = useState<null | "extension" | "connector" | "phone" | "bookmark">(null);
   const [mobile, setMobile] = useState(false);
   const [phoneMode, setPhoneMode] = useState(false);
   useEffect(() => {
@@ -111,11 +113,16 @@ export function ConnectCard() {
   const conPaired = !!availability?.connectorPaired;
   const checking = phase === "booting" || !availability;
 
-  const ready = useCallback((m: Method | null) => m === "demo" || (m === "extension" && extOk) || (m === "connector" && conPaired), [extOk, conPaired]);
+  const tabOk = !!availability?.tab;
+  const ready = useCallback((m: Method | null) => m === "demo" || (m === "tab" && tabOk) || (m === "extension" && extOk) || (m === "connector" && conPaired), [extOk, conPaired, tabOk]);
 
   useEffect(() => {
     if (!availability || method) return;
-    if (saved && saved.transport !== "same-origin") {
+    if (availability.tab) {
+      setMethod("tab");
+      return;
+    }
+    if (saved && saved.transport !== "same-origin" && saved.transport !== "tab") {
       setMethod(saved.transport as Method);
       if (saved.transport !== "demo") setHost(new URL(saved.host).host);
     } else setMethod(availability.extension ? "extension" : availability.connector ? "connector" : null);
@@ -236,9 +243,26 @@ export function ConnectCard() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[14.5px] font-medium">Manage your router from this phone</span>
-                  <span className="mt-0.5 block text-[12.5px] opacity-70">Takes a one-time setup on a computer or with Termux on Android. See how →</span>
+                  <span className="mt-0.5 block text-[12.5px] opacity-70">Easiest: the Router page button below. Or use a computer at home. See how →</span>
                 </span>
               </button>
+            )}
+            {!phoneMode && (
+              <MethodRow
+                icon={<Bookmark className="size-5" />}
+                title="Router page button"
+                subtitle="No download. Click a RouterDeck bookmark on your router's own page (192.168.1.1)."
+                selected={method === "tab"}
+                onSelect={() => (tabOk ? setMethod("tab") : setDialog("bookmark"))}
+                status={tabOk ? <Badge tone="green">Connected</Badge> : <Badge>No install</Badge>}
+                action={
+                  !tabOk ? (
+                    <Button size="sm" variant="secondary" onClick={(e) => (e.stopPropagation(), setDialog("bookmark"))}>
+                      Set up
+                    </Button>
+                  ) : undefined
+                }
+              />
             )}
             {!mobile && !phoneMode && <MethodRow
               icon={<Puzzle className="size-5" />}
@@ -408,6 +432,7 @@ export function ConnectCard() {
       )}
 
       <ExtensionSetupDialog open={dialog === "extension"} onClose={() => setDialog(null)} />
+      <BookmarkletDialog open={dialog === "bookmark"} onClose={() => setDialog(null)} routerHost={host.replace(/^https?:\/\//, "") || "192.168.1.1"} />
       <Dialog open={dialog === "phone"} onClose={() => setDialog(null)} size="lg" title="Use RouterDeck on your phone" description="Phones can't install browser extensions, so a small helper runs once on a device at home.">
         <PhoneSetup compact />
       </Dialog>

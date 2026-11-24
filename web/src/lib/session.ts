@@ -6,6 +6,7 @@ import type { DriverFactory, RouterDriver } from "./router/types";
 import { RouterError } from "./router/types";
 import { ConnectorTransport, detectConnector } from "./transport/connector";
 import { detectExtension, ExtensionTransport } from "./transport/extension";
+import { detectTabBridge, TabTransport } from "./transport/tab";
 import type { Transport, TransportKind } from "./transport/types";
 import { isPrivateHost, TransportError } from "./transport/types";
 
@@ -29,6 +30,8 @@ export interface Availability {
   connector: { version: string } | null;
   /** Connector running AND our saved pairing code is accepted. */
   connectorPaired: boolean;
+  /** Opened from the router-tab bookmark: the router's origin. */
+  tab: { origin: string } | null;
   checkedAt: number;
 }
 
@@ -116,6 +119,7 @@ export function normalizeHost(input: string): string {
 
 function makeTransport(kind: TransportKind): Transport {
   if (kind === "extension") return new ExtensionTransport();
+  if (kind === "tab") return new TabTransport();
   if (kind === "connector") {
     const token = getConnectorToken();
     if (!token) throw new TransportError("Enter the pairing code shown by the RouterDeck connector.", "unauthorized");
@@ -134,7 +138,7 @@ export const useSession = create<SessionState>((set, get) => ({
   connection: null,
 
   async refreshAvailability() {
-    const [extension, connector] = await Promise.all([detectExtension(), detectConnector()]);
+    const [extension, connector, tab] = await Promise.all([detectExtension(), detectConnector(), detectTabBridge()]);
     let connectorPaired = false;
     const token = getConnectorToken();
     if (connector && token) {
@@ -146,7 +150,7 @@ export const useSession = create<SessionState>((set, get) => ({
         if (e instanceof TransportError && e.code === "unauthorized") setConnectorToken(null);
       }
     }
-    const availability = { extension, connector, connectorPaired, checkedAt: Date.now() };
+    const availability = { extension, connector, connectorPaired, tab, checkedAt: Date.now() };
     set({ availability });
     return availability;
   },
@@ -169,6 +173,7 @@ export const useSession = create<SessionState>((set, get) => ({
       }
       if (saved.transport === "extension" && !availability.extension) return set({ phase: "disconnected" });
       if (saved.transport === "connector" && !availability.connector) return set({ phase: "disconnected" });
+      if (saved.transport === "tab" && !availability.tab) return set({ phase: "disconnected" });
       const transport = makeTransport(saved.transport);
       const factory = DRIVERS.find((d) => d.id === saved.driverId);
       if (!factory) return set({ phase: "disconnected" });

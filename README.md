@@ -51,10 +51,10 @@ A router's admin page only answers **inside your home network**. No cloud server
 
 ```
  RouterDeck website (static, Cloudflare Pages)
-        │  postMessage                      │  http://127.0.0.1 + pairing code
-        ▼                                   ▼
- RouterDeck Connect extension      or    Local connector (Node.js)
-        └──────────────► Your router (192.168.x.x) ◄──────────────┘
+        │ postMessage            │ postMessage (window.opener)     │ http://127.0.0.1 + pairing code
+        ▼                        ▼                                 ▼
+ Browser extension      or   Router tab bookmark (no install) or   RouterDeck Connect app
+        └────────────────────► Your router (192.168.x.x) ◄──────────────────┘
 ```
 
 - **Zero servers.** Hosting is free and nothing sensitive passes through anyone's infrastructure.
@@ -70,7 +70,9 @@ See [SECURITY.md](SECURITY.md) for the full security model.
 
 **On a computer**
 1. Open **<https://router.pramitha.lk>** on a computer connected to your home Wi-Fi.
-2. Pick one helper (one time):
+2. Pick one way to connect (one time):
+   - **Router page button (no download):** drag the RouterDeck bookmark to your bookmarks bar, open `http://192.168.1.1`
+     and click it. RouterDeck opens in a new tab, connected through your router's own page.
    - **RouterDeck Connect** app: [Windows](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Connect-Windows.exe) ·
      [Mac (Apple Silicon)](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Connect-macOS-AppleSilicon.zip) ·
      [Mac (Intel)](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Connect-macOS-Intel.zip) ·

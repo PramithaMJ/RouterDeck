@@ -19,7 +19,7 @@ const CAN_DO = [
 
 const STEPS = [
   ["Open RouterDeck", "On a computer that's on your home Wi-Fi."],
-  ["Add the small bridge", "A browser extension (or a one-file connector). It lets this page talk to your router and nothing else."],
+  ["Pick how to connect", "No download: drag the RouterDeck bookmark and click it on your router's page. Or use the extension, or the RouterDeck Connect app (which also lets phones join)."],
   ["Sign in once", "RouterDeck finds your router and your provider. Use the password on the router's label."],
 ];
 
@@ -29,8 +29,8 @@ const FAQ = [
     "Your password goes from your browser straight to your router, through the bridge on your own computer. RouterDeck has no servers, no accounts and stores nothing. The code is open source, so anyone can check.",
   ],
   [
-    "Why do I need an extension or connector?",
-    "Your router only talks to devices inside your home. Browsers (rightly) stop public websites from reaching it. The bridge is the one piece that runs on your computer and passes requests to your router, and only after you approve it.",
+    "Do I have to download anything?",
+    "No. Drag the RouterDeck bookmark to your bookmarks bar, open your router's page (usually 192.168.1.1) and click it. RouterDeck opens connected through that tab. Browsers (rightly) stop public websites from reaching your router directly, so the bookmark works from inside your router's own page. The extension and the RouterDeck Connect app are optional extras for one-click use and for phones.",
   ],
   [
     "Which routers work?",
