@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Logo } from "@/components/brand";
 import { BuiltByFooter } from "@/components/built-by";
 
-export const metadata: Metadata = { title: "Privacy", description: "What RouterDeck, RouterDeck Connect and the RouterDeck extension do with your data: nothing leaves your home network." };
+export const metadata: Metadata = { alternates: { canonical: "/privacy/" }, title: "Privacy", description: "What RouterDeck, RouterDeck Connect and the RouterDeck extension do with your data: nothing leaves your home network." };
 
 const SECTIONS: [string, string[]][] = [
   [
