@@ -61,10 +61,11 @@ The extension gives desktop users a one-click "Add to Chrome" setup. Everything 
 17. Click **Submit for review**. Reviews usually take **1–3 working days** (sometimes longer for extensions with host permissions). You'll get an email.
 
 ### After approval
-18. Copy the listing URL (e.g. `https://chromewebstore.google.com/detail/routerdeck/<id>`).
-19. Cloudflare → **Workers & Pages → routerdeck → Settings → Build → Variables and secrets → Add**:
-    - Name: `NEXT_PUBLIC_CHROME_STORE_URL` · Value: the listing URL → **Save**.
-20. **Deployments → Retry/redeploy latest** (or push any commit). The site now shows **"Add to Chrome"** instead of the manual steps.
+**Published:** <https://chromewebstore.google.com/detail/routerdeck/egfnlpdojhpdhakgcifhiadchbanddjj> (extension ID `egfnlpdojhpdhakgcifhiadchbanddjj`).
+
+This URL is the default for `CHROME_STORE_URL` in `web/src/lib/downloads.ts`, so the site shows **"Add to Chrome"** with no extra setup.
+A fork that publishes its own listing can override it with the build variable `NEXT_PUBLIC_CHROME_STORE_URL`
+(Cloudflare → **Workers & Pages → routerdeck → Settings → Build → Variables and secrets**), then redeploy.
 
 ---
 

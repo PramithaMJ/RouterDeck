@@ -10,10 +10,11 @@ A modern, mobile-friendly dashboard for home routers. Block a device, change the
 run a speed test or check your connection in seconds, on SLT-Mobitel fiber, Dialog / Mobitel / Hutch 4G routers,
 Starlink and more.
 
-[**Open RouterDeck →**](https://router.pramitha.lk) &nbsp;·&nbsp; [Try the demo](https://router.pramitha.lk) &nbsp;·&nbsp; [Report a bug](https://github.com/PramithaMJ/RouterDeck/issues/new/choose)
+[**Open RouterDeck →**](https://router.pramitha.lk) &nbsp;·&nbsp; [Try the demo](https://router.pramitha.lk) &nbsp;·&nbsp; [Chrome extension](https://chromewebstore.google.com/detail/routerdeck/egfnlpdojhpdhakgcifhiadchbanddjj) &nbsp;·&nbsp; [Report a bug](https://github.com/PramithaMJ/RouterDeck/issues/new/choose)
 
 [![CI](https://github.com/PramithaMJ/RouterDeck/actions/workflows/ci.yml/badge.svg)](https://github.com/PramithaMJ/RouterDeck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-indigo.svg)](LICENSE)
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/egfnlpdojhpdhakgcifhiadchbanddjj?label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/routerdeck/egfnlpdojhpdhakgcifhiadchbanddjj)
 
 </div>
 
@@ -105,7 +106,7 @@ Windows → *More info → Run anyway*; macOS → *System Settings → Privacy &
      [Mac (Intel)](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Connect-macOS-Intel.zip) ·
      [Linux](https://github.com/PramithaMJ/RouterDeck/releases/latest/download/RouterDeck-Connect-Linux.zip).
      Double-click it; it opens RouterDeck already paired.
-   - or the **browser extension** for Chrome / Edge / Brave.
+   - or the **browser extension** for Chrome / Edge / Brave: [**Add to Chrome** from the Chrome Web Store](https://chromewebstore.google.com/detail/routerdeck/egfnlpdojhpdhakgcifhiadchbanddjj).
 3. RouterDeck finds your router. Sign in with the router's own username and password.
 
 **On a phone (iPhone or Android), nothing to install**

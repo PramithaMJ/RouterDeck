@@ -28,8 +28,8 @@ export const DESKTOP_APPS: Record<ConnectApp, { label: string; file: string; kin
 
 export const RELEASES_PAGE = "https://github.com/PramithaMJ/RouterDeck/releases/latest";
 
-/** Chrome Web Store listing, once published (set NEXT_PUBLIC_CHROME_STORE_URL). */
-export const CHROME_STORE_URL = process.env.NEXT_PUBLIC_CHROME_STORE_URL || "";
+/** Chrome Web Store listing (NEXT_PUBLIC_CHROME_STORE_URL overrides it, e.g. for a fork). */
+export const CHROME_STORE_URL = process.env.NEXT_PUBLIC_CHROME_STORE_URL || "https://chromewebstore.google.com/detail/routerdeck/egfnlpdojhpdhakgcifhiadchbanddjj";
 
 export async function detectPlatform(): Promise<ConnectApp> {
   if (typeof navigator === "undefined") return "windows";

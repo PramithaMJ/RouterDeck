@@ -14,7 +14,8 @@ Linux AppImage → `chmod +x` then run.
 
 **RouterDeck Connect** (small helper for using RouterDeck in the browser or on phones): `RouterDeck-Connect-*`.
 
-**Browser extension**: `routerdeck-chrome-edge-*.zip` (Chrome Web Store / Edge Add-ons), `routerdeck-firefox-*.zip`,
+**Browser extension**: install from the [Chrome Web Store](https://chromewebstore.google.com/detail/routerdeck/egfnlpdojhpdhakgcifhiadchbanddjj) (Chrome, Edge, Brave).
+Manual packages: `routerdeck-chrome-edge-*.zip` (store upload), `routerdeck-firefox-*.zip`,
 `routerdeck-extension.zip` (load unpacked).
 
 Verify downloads with `SHA256SUMS.txt`.

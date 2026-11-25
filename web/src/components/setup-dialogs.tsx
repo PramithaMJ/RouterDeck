@@ -68,9 +68,18 @@ export function ExtensionSetupDialog({ open, onClose }: { open: boolean; onClose
             <a href={CHROME_STORE_URL} target="_blank" rel="noopener" className="bg-ink inline-flex h-10 items-center gap-2 rounded-lg px-4 text-[14px] font-medium">
               Add to Chrome <ExternalLink className="size-4" />
             </a>
-            <p className="mt-1.5 text-[12.5px] text-muted">Opens the Chrome Web Store. Click &quot;Add to Chrome&quot;, then come back.</p>
+            <p className="mt-1.5 text-[12.5px] text-muted">
+              Opens the Chrome Web Store. Click &quot;Add to Chrome&quot;, then come back. On Edge, click &quot;Allow extensions from other stores&quot; first.
+            </p>
           </Step>
           <Step n={2}>Reload this page. The first time you connect, the extension asks you to allow this site to talk to your router.</Step>
+          <li className="text-[12.5px] text-muted">
+            Can&apos;t use the Chrome Web Store?{" "}
+            <a href="/downloads/routerdeck-extension.zip" download className="text-[var(--text)] underline underline-offset-2">
+              Download the extension
+            </a>
+            , unzip it, then in <span className="font-mono">chrome://extensions</span> turn on Developer mode and click Load unpacked.
+          </li>
         </ol>
       ) : (
         <ol className="space-y-4">

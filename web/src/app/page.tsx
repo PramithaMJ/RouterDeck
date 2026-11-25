@@ -21,7 +21,7 @@ const CAN_DO = [
 
 const STEPS = [
   ["Open RouterDeck", "On a computer that's on your home Wi-Fi."],
-  ["Pick how to connect", "No download: drag the RouterDeck bookmark and click it on your router's page. Or use the extension, or the RouterDeck Connect app (which also lets phones join)."],
+  ["Pick how to connect", "No download: drag the RouterDeck bookmark and click it on your router's page. Or add the Chrome extension, or use the RouterDeck Connect app (which also lets phones join)."],
   ["Sign in once", "RouterDeck finds your router and your provider. Use the password on the router's label."],
 ];
 
@@ -32,7 +32,7 @@ const FAQ = [
   ],
   [
     "Do I have to download anything?",
-    "No. Drag the RouterDeck bookmark to your bookmarks bar, open your router's page (usually 192.168.1.1) and click it. RouterDeck opens connected through that tab. Browsers (rightly) stop public websites from reaching your router directly, so the bookmark works from inside your router's own page. For the full experience, install the free desktop app for Windows, Mac or Linux. The extension and RouterDeck Connect are other optional extras.",
+    "No. Drag the RouterDeck bookmark to your bookmarks bar, open your router's page (usually 192.168.1.1) and click it. RouterDeck opens connected through that tab. Browsers (rightly) stop public websites from reaching your router directly, so the bookmark works from inside your router's own page. For the full experience, install the free desktop app for Windows, Mac or Linux. The Chrome extension (one click from the Chrome Web Store) and RouterDeck Connect are other optional extras.",
   ],
   [
     "Which routers work?",

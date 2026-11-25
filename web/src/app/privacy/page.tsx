@@ -26,7 +26,7 @@ const SECTIONS: [string, string[]][] = [
   [
     "The browser extension (RouterDeck Connect for Chrome)",
     [
-      "The extension only runs on RouterDeck's own website. It forwards requests from that website to devices on your private home network (addresses like 192.168.x.x) after you approve each website and router once.",
+      "It is published on the Chrome Web Store as RouterDeck (chromewebstore.google.com/detail/routerdeck/egfnlpdojhpdhakgcifhiadchbanddjj). The extension only runs on RouterDeck's own website. It forwards requests from that website to devices on your private home network (addresses like 192.168.x.x) after you approve each website and router once.",
       "It refuses any address on the public internet. It stores only the list of websites and routers you approved, in the browser's extension storage. It collects, sells or transmits no data.",
     ],
   ],

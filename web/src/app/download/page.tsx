@@ -5,6 +5,7 @@ import { BuiltByFooter } from "@/components/built-by";
 import { DownloadPicker } from "@/components/download-picker";
 import { InstallCommand } from "@/components/install-command";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { CHROME_STORE_URL } from "@/lib/downloads";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/download/" },
@@ -74,7 +75,11 @@ export default function DownloadPage() {
           <Link href="/#connect" className="text-[var(--text)] underline underline-offset-2">
             the website
           </Link>{" "}
-          using the router page button, the browser extension or a one-line terminal command.
+          using the router page button, the{" "}
+          <a href={CHROME_STORE_URL} target="_blank" rel="noopener" className="text-[var(--text)] underline underline-offset-2">
+            Chrome extension
+          </a>{" "}
+          or a one-line terminal command.
         </p>
       </main>
       <BuiltByFooter />
